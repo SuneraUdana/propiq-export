@@ -5,42 +5,47 @@ from collections import defaultdict
 MAX_RETRIES = 3
 
 class AgentState(dict):
-    
     def __init__(self):
         super().__init__(task_queue=[],completed=[],records=[],enriched=[],
                          weights=None,scored=[],report_path=None,
-                         retries=0,ok=False,log=[])
+                         retries=0,ok=False,log=[],failed_tasks=[])
     def log(self, msg):
         ts = time.strftime("%H:%M:%S")
         self["log"].append(f"[{ts}] {msg}")
         print(f"  [agent] {msg}")
 
+
 def planner(state, target_suburbs):
     state.log(f"Planner activated → {target_suburbs}")
     state["task_queue"] = [
-        {"name":"ingest",   "args":{"suburbs":target_suburbs}},
-        {"name":"enrich",   "args":{}},
-        {"name":"optimise", "args":{}},
-        {"name":"score",    "args":{}},
-        {"name":"report",   "args":{}},
+        {"name":"ingest",   "args":{"suburbs":target_suburbs}, "attempts":0},
+        {"name":"enrich",   "args":{},                         "attempts":0},
+        {"name":"optimise", "args":{},                         "attempts":0},
+        {"name":"score",    "args":{},                         "attempts":0},
+        {"name":"report",   "args":{},                         "attempts":0},
     ]
     return state
 
+
 def tool_use(state):
-    if not state["task_queue"]: state["ok"]=True; return state
+    if not state["task_queue"]:
+        state["ok"] = True
+        return state
+
     task = state["task_queue"].pop(0)
-    name, args = task["name"], task.get("args",{})
-    state.log(f"Executing task: {name}")
+    name = task["name"]
+    task["attempts"] += 1
+    state.log(f"Executing task: {name} (attempt {task['attempts']}/{MAX_RETRIES})")
+
     try:
         if name == "ingest":
-            from propiq.scraper import run_scraper as ingest
-            from propiq.simulator import simulate_listings; state["records"] = simulate_listings()
+            from propiq.simulator import simulate_listings, clean_records
+            state["records"] = clean_records(simulate_listings())
         elif name == "enrich":
             from propiq.enrichment import enrich_batch
             state["enriched"] = enrich_batch(state["records"], verbose=True)
         elif name == "optimise":
             from propiq.optimizer import optimise_weights, _compute_features
-            from collections import defaultdict
             import numpy as np
             records = state["enriched"]
             sub_prices = defaultdict(list)
@@ -55,12 +60,22 @@ def tool_use(state):
         elif name == "report":
             from propiq.reporter import generate_report
             state["report_path"] = generate_report(state["scored"])
+
         state["completed"].append(name)
+        state.log(f"Task '{name}' completed ✓")
+
     except Exception as ex:
-        state.log(f"Task '{name}' FAILED: {ex}")
+        state.log(f"Task '{name}' FAILED (attempt {task['attempts']}): {ex}")
         traceback.print_exc()
-        state["task_queue"].insert(0, task)
+        if task["attempts"] < MAX_RETRIES:
+            state.log(f"Retrying '{name}' ({task['attempts']}/{MAX_RETRIES})...")
+            state["task_queue"].insert(0, task)   # retry
+        else:
+            state.log(f"Task '{name}' gave up after {MAX_RETRIES} attempts — skipping.")
+            state["failed_tasks"].append({"task": name, "error": str(ex)})
+
     return state
+
 
 def reflector(state):
     checks = {
@@ -76,19 +91,32 @@ def reflector(state):
         state.log(f"Reflection FAILED: {failed}  (retry {state['retries']}/{MAX_RETRIES})")
         state["ok"] = False
     else:
-        state.log("Reflection PASSED all checks ✓"); state["ok"] = True
+        state.log("Reflection PASSED all checks ✓")
+        state["ok"] = True
     return state
+
 
 def run_pipeline(target_suburbs):
     state = AgentState()
     print("\n" + "═"*60 + "\n PropIQ Agentic Pipeline — Starting\n" + "═"*60)
     state = planner(state, target_suburbs)
-    while state["task_queue"] and state["retries"] < MAX_RETRIES:
+
+    # Execute all tasks (each has its own retry counter)
+    while state["task_queue"]:
         state = tool_use(state)
+
+    # Reflect on final state
     state = reflector(state)
+
+    # If reflection fails, re-queue only the failed checks (not all tasks)
     while not state["ok"] and state["retries"] < MAX_RETRIES:
-        while state["task_queue"]: state = tool_use(state)
+        while state["task_queue"]:
+            state = tool_use(state)
         state = reflector(state)
+
+    # Summary
     status = "✓ SUCCESS" if state["ok"] else "✗ FAILED after max retries"
-    print(f"═"*60 + f"\n Pipeline: {status}\n Report  : {state['report_path']}\n" + "═"*60 + "\n")
+    if state["failed_tasks"]:
+        print(f"  [agent] Skipped tasks: {[t['task'] for t in state['failed_tasks']]}")
+    print("═"*60 + f"\n Pipeline: {status}\n Report  : {state['report_path']}\n" + "═"*60 + "\n")
     return state
