@@ -7,3 +7,8 @@ data/propiq.db
 *.egg-info/
 dist/
 .anaconda/
+.venv/
+venv/
+env/
+node_modules/
+*.db
