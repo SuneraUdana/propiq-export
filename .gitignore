@@ -1,10 +1,9 @@
-.venv/
 __pycache__/
 *.pyc
+*.pyo
 .env
-data/propiq.db
-reports/
-output/
-assets/
-*.egg-info/
 .DS_Store
+data/propiq.db
+*.egg-info/
+dist/
+.anaconda/
