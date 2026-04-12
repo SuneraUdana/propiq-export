@@ -219,7 +219,7 @@ with tab4:
     display_cols = ["address","suburb","council","sale_price","bedrooms","bathrooms",
                     "land_size_sqm","walk_score","school_rating","yield_proxy","inv_score","badges"]
     display_cols = [c for c in display_cols if c in top_df.columns]
-    styled = top_df[display_cols].style.applymap(score_color, subset=["inv_score"]).format({
+    styled = top_df[display_cols].style.map(score_color, subset=["inv_score"]).format({
         "sale_price": "${:,.0f}", "inv_score": "{:.3f}",
         "yield_proxy": "{:.3f}",  "walk_score": "{:.0f}"
     })
