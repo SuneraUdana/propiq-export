@@ -4,3 +4,4 @@ pandas
 ollama
 ollama
 groq
+groq
