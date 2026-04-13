@@ -12,3 +12,4 @@ venv/
 env/
 node_modules/
 *.db
+.streamlit/secrets.toml
