@@ -8,3 +8,4 @@ propiq.db
 .DS_Store
 design-test.html.streamlit/
 data/*.db
+data/*.db
