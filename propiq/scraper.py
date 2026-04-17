@@ -1,261 +1,310 @@
-import json, re, time, random, logging
-from pathlib import Path
+import time
+import json
+import random
+import hashlib
+import re
+import logging
+from typing import Optional
+from datetime import datetime
 
-log = logging.getLogger("propiq.scraper")
-logging.basicConfig(level=logging.INFO, format="[scraper] %(message)s")
+import requests
+import cloudscraper as _cs
+_session = _cs.create_scraper()
+import cloudscraper as _cs
+_session = _cs.create_scraper()
+from bs4 import BeautifulSoup
 
-try:
-    from curl_cffi import requests as cf
-    CURL_OK = True
-except ImportError:
-    import requests as cf
-    CURL_OK = False
+logger = logging.getLogger(__name__)
 
-HEADERS = {
-    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+# ── Constants ────────────────────────────────────────────────────────────────
+
+BASE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/123.0.0.0 Safari/537.36"
+    ),
     "Accept-Language": "en-AU,en;q=0.9",
-    "Referer":         "https://www.realestate.com.au/",
-    "Cache-Control":   "no-cache",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Referer": "https://www.domain.com.au/",
 }
 
-MAX_429_WAITS = 3   # max times to wait on rate-limit per page
+SUBURB_SLUGS = {
+    "Fitzroy":     "fitzroy-vic-3065",
+    "Richmond":    "richmond-vic-3121",
+    "Hawthorn":    "hawthorn-vic-3122",
+    "Brunswick":   "brunswick-vic-3056",
+    "South Yarra": "south-yarra-vic-3141",
+    "Collingwood": "collingwood-vic-3066",
+    "St Kilda":    "st-kilda-vic-3182",
+    "Prahran":     "prahran-vic-3181",
+    "Northcote":   "northcote-vic-3070",
+    "Footscray":   "footscray-vic-3011",
+}
+
+PROPERTY_TYPE_MAP = {
+    "ApartmentUnitFlat": "unit",
+    "House":             "house",
+    "Townhouse":         "townhouse",
+    "Terrace":           "house",
+    "Villa":             "unit",
+    "Studio":            "unit",
+    "DuplexSemiDetached":"house",
+    "NewApartments":     "unit",
+}
 
 
-def _load_cookies():
-    f = Path(__file__).parent.parent / "data" / "rea_cookies.json"
-    if not f.exists():
-        log.warning("No rea_cookies.json found — requests may be blocked")
-        return {}
-    c = json.loads(f.read_text())
-    cookies = {x["name"]: x["value"] for x in c if isinstance(x, dict)}
-    log.info(f"Loaded {len(cookies)} cookies")
-    return cookies
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _get(url: str, retries: int = 3) -> Optional[requests.Response]:
+    """Polite GET with retries and random delay."""
+    for attempt in range(retries):
+        try:
+            time.sleep(random.uniform(1.8, 3.2))
+            resp = _session.get(url, headers=BASE_HEADERS, timeout=20)
+            if resp.status_code == 200:
+                return resp
+            elif resp.status_code == 429:
+                wait = 30 * (attempt + 1)
+                logger.warning(f"Rate limited — waiting {wait}s")
+                time.sleep(wait)
+            else:
+                logger.warning(f"HTTP {resp.status_code} for {url}")
+        except requests.RequestException as e:
+            logger.warning(f"Request error ({attempt+1}/{retries}): {e}")
+            time.sleep(5)
+    return None
 
 
-def _price(raw):
-    if not raw: return None
-    s = str(raw).replace(",", "").upper()
-    m = re.search(r"[0-9]+\.?[0-9]*", s.replace("$", ""))
-    if not m: return None
-    v = float(m.group())
-    if "M" in s and v < 200:    v *= 1_000_000
-    elif "K" in s and v < 5000: v *= 1_000
-    return v if v > 50_000 else None
-
-
-def _land(raw):
-    if not raw: return None
-    s = str(raw).lower().replace(",", "")
-    if "ha" in s:
-        m = re.search(r"[0-9.]+", s)
-        return float(m.group()) * 10_000 if m else None
-    m = re.search(r"[0-9.]+", s)
-    v = float(m.group()) if m else None
-    return v if v and 20 < v < 500_000 else None
-
-
-def _extract_listings(pp):
-    """Try every known NEXT_DATA path REA has used and return raw listing list."""
-    raw_list = []
-    paths = [
-        ["componentProps", "listingsResult", "data", "tieredResults"],
-        ["componentProps", "listingsResult", "data", "exactResults"],
-        ["searchResults", "results"],
-        ["initialProps",  "results"],
-        ["componentProps", "results"],
-    ]
-    for path in paths:
-        node = pp
-        for k in path:
-            node = node.get(k, {}) if isinstance(node, dict) else {}
-        if isinstance(node, list) and node:
-            for item in node:
-                if isinstance(item, dict) and "results" in item:
-                    raw_list.extend(item["results"])
-                elif isinstance(item, dict) and "id" in item:
-                    raw_list.append(item)
-            if raw_list:
-                log.info(f"  Found listings at path: {' > '.join(path)}")
-                break
-    return raw_list
-
-
-def _parse_record(raw, suburb):
-    addr   = raw.get("address", {})
-    street = addr.get("streetAddress", "") if isinstance(addr, dict) else ""
-    sub    = addr.get("suburb", suburb)    if isinstance(addr, dict) else suburb
-    pc     = str(addr.get("postcode", "")) if isinstance(addr, dict) else ""
-
-    pnode  = raw.get("price", {})
-    praw   = pnode.get("display", "") if isinstance(pnode, dict) else str(pnode or "")
-    # Also check soldDetails
-    if not praw:
-        sd = raw.get("soldDetails", {})
-        praw = sd.get("soldPrice", "") or sd.get("display", "") if isinstance(sd, dict) else ""
-    price = _price(praw)
-    if not street or not price:
+def _extract_next_data(html: str) -> Optional[dict]:
+    """Extract __NEXT_DATA__ JSON blob from Domain page HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    tag  = soup.find("script", {"id": "__NEXT_DATA__"})
+    if not tag or not tag.string:
+        return None
+    try:
+        return json.loads(tag.string)
+    except json.JSONDecodeError:
         return None
 
-    feats = raw.get("generalFeatures", {}) or {}
-    beds  = feats.get("bedrooms",  {}).get("value") if isinstance(feats, dict) else None
-    baths = feats.get("bathrooms", {}).get("value") if isinstance(feats, dict) else None
 
-    ptype = (raw.get("propertyType", "") or "house").lower()
-    if   "townhouse" in ptype:               ptype = "townhouse"
-    elif "unit" in ptype or "apart" in ptype: ptype = "unit"
-    else:                                     ptype = "house"
-
-    ags   = raw.get("agents", raw.get("listers", [])) or []
-    ag    = ags[0] if isinstance(ags, list) and ags else {}
-    aname = ag.get("name", "")       if isinstance(ag, dict) else ""
-    agenc = ag.get("agencyName", "") if isinstance(ag, dict) else ""
-
-    lraw = ""
-    for key in ["landSize", "land"]:
-        nd = raw.get(key)
-        if isinstance(nd, dict):
-            lraw = nd.get("displayValue", "") or nd.get("value", "")
-        elif nd:
-            lraw = str(nd)
-        if lraw: break
-
-    imgs = []
-    for img in (raw.get("images") or [])[:4]:
-        u = img.get("url", "") if isinstance(img, dict) else ""
-        if u.startswith("http"): imgs.append(u)
-
-    lurl = raw.get("canonicalUrl", "")
-    if lurl and not lurl.startswith("http"):
-        lurl = "https://www.realestate.com.au" + lurl
-
-    return {
-        "address":       str(street),
-        "suburb":        str(sub),
-        "state":         "VIC",
-        "postcode":      pc,
-        "sale_price":    price,
-        "land_size_sqm": _land(lraw),
-        "house_type":    ptype,
-        "year_built":    None,
-        "bedrooms":      int(beds)  if beds  else None,
-        "bathrooms":     int(baths) if baths else None,
-        "agent_name":    aname,
-        "agent_phone":   "",
-        "agency":        agenc,
-        "image_urls":    json.dumps(imgs),
-        "listing_url":   lurl,
-        "source":        "rea",
-    }
+def _parse_price(price_str: str) -> float:
+    """Parse price strings like '$1,250,000' or 'Contact agent' → float."""
+    if not price_str:
+        return 0.0
+    nums = re.findall(r"[\d]+", price_str.replace(",", ""))
+    if not nums:
+        return 0.0
+    values = [int(n) for n in nums if len(n) >= 5]
+    if not values:
+        return 0.0
+    return float(sum(values) / len(values))  # avg if range given
 
 
-def _scrape_suburb(session, cookies, suburb, max_pages):
-    records = []
-    slug    = suburb.lower().replace(" ", "-")
-    pg      = 1
+def _make_listing_id(address: str, suburb: str) -> str:
+    raw = f"{address}_{suburb}".lower().strip()
+    return hashlib.md5(raw.encode()).hexdigest()[:12]
 
-    while pg <= max_pages:
-        url = (f"https://www.realestate.com.au/sold/in-{slug},+vic/list-{pg}"
-               f"?sortType=soldDate-desc")
-        log.info(f"  {suburb} page {pg}")
 
-        waits = 0
-        while True:   # retry loop for 429
-            try:
-                if CURL_OK:
-                    r = session.get(url, headers=HEADERS, cookies=cookies,
-                                    impersonate="chrome120", timeout=25)
-                else:
-                    r = session.get(url, headers=HEADERS, cookies=cookies, timeout=25)
-            except Exception as e:
-                log.warning(f"  Request error: {e}")
-                break
+# ── Parsers ──────────────────────────────────────────────────────────────────
 
-            log.info(f"  HTTP {r.status_code}")
+def _parse_listing_node(node: dict, suburb: str) -> Optional[dict]:
+    """Map a Domain listing JSON node → PropIQ record schema."""
+    try:
+        listing = node.get("listingModel") or node.get("listing") or node
+        details  = listing.get("address", {})
+        features = listing.get("features", {}) or listing.get("landDetails", {})
+        price_d  = listing.get("price", {}) or {}
+        advert   = listing.get("advertiser", {}) or {}
+        media    = listing.get("media", []) or []
 
-            # ── Rate limited: wait and retry SAME page ──────────────
-            if r.status_code == 429:
-                waits += 1
-                if waits > MAX_429_WAITS:
-                    log.warning(f"  429 repeated {waits}x — giving up on {suburb}")
-                    return records
-                wait = 60 * waits          # 60s, 120s, 180s
-                log.warning(f"  429 — waiting {wait}s (attempt {waits}/{MAX_429_WAITS})")
-                time.sleep(wait)
-                continue                   # retry same page
-
-            # ── Non-200 other than 429: skip suburb ──────────────────
-            if r.status_code != 200:
-                log.warning(f"  HTTP {r.status_code} — stopping {suburb}")
-                return records
-
-            break   # got a 200 — exit retry loop
-
-        # ── Parse NEXT_DATA ──────────────────────────────────────────
-        nd_match = re.search(
-            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-            r.text, re.DOTALL
+        address_str = (
+            listing.get("address", {}).get("street", "")
+            or listing.get("displayableAddress", "")
+            or listing.get("address", "") or ""
         )
-        if not nd_match:
-            log.warning("  No NEXT_DATA in response")
-            Path("data").mkdir(exist_ok=True)
-            Path("data/debug_page.html").write_text(r.text[:20000])
-            log.info("  Saved dump → data/debug_page.html")
+        if isinstance(address_str, dict):
+            address_str = address_str.get("street","") or ""
+
+        prop_types = listing.get("propertyTypes", []) or [listing.get("propertyType","house")]
+        raw_type   = prop_types[0] if prop_types else "house"
+        house_type = PROPERTY_TYPE_MAP.get(raw_type, "house")
+
+        price_raw  = (price_d.get("display") or price_d.get("from") or
+                      listing.get("priceLabel","") or "")
+        sale_price = _parse_price(str(price_raw))
+
+        bedrooms   = int(listing.get("bedrooms")   or features.get("bedrooms",   2) or 2)
+        bathrooms  = int(listing.get("bathrooms")  or features.get("bathrooms",  1) or 1)
+        land_sqm   = float(listing.get("landAreaSqm") or features.get("landArea", 0) or 0)
+
+        agent_name  = advert.get("name") or advert.get("agentName") or ""
+        agency_name = advert.get("agency") or advert.get("agencyName") or ""
+
+        listing_id = (str(listing.get("id") or listing.get("listingId") or
+                      _make_listing_id(address_str, suburb)))
+
+        # Skip if no useful price or address
+        if not address_str:
+            return None
+
+        return {
+            "listing_id":    listing_id,
+            "suburb":        suburb,
+            "address":       address_str.strip(),
+            "sale_price":    sale_price,
+            "land_size_sqm": land_sqm,
+            "house_type":    house_type,
+            "year_built":    None,
+            "bedrooms":      bedrooms,
+            "bathrooms":     bathrooms,
+            "agent_name":    agent_name,
+            "agency":        agency_name,
+            "agent_phone":   "",
+            "source":        "domain",
+            "scraped_at":    datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.debug(f"Parse error on node: {e}")
+        return None
+
+
+def _walk_next_data(data: dict, suburb: str) -> list[dict]:
+    """Walk __NEXT_DATA__ tree to find listing nodes."""
+    records = []
+
+    def _recurse(obj):
+        if isinstance(obj, list):
+            for item in obj:
+                _recurse(item)
+        elif isinstance(obj, dict):
+            # Domain wraps listings in various keys
+            if any(k in obj for k in ("listingModel","listing","propertyTypes","bedrooms")):
+                r = _parse_listing_node(obj, suburb)
+                if r:
+                    records.append(r)
+            for v in obj.values():
+                if isinstance(v, (dict, list)):
+                    _recurse(v)
+
+    _recurse(data)
+
+    # Deduplicate by listing_id
+    seen = set()
+    unique = []
+    for r in records:
+        if r["listing_id"] not in seen:
+            seen.add(r["listing_id"])
+            unique.append(r)
+    return unique
+
+
+# ── Main scrape functions ────────────────────────────────────────────────────
+
+def scrape_for_sale(suburb: str, pages: int = 3) -> list[dict]:
+    """Scrape active for-sale listings for a suburb."""
+    slug     = SUBURB_SLUGS.get(suburb, suburb.lower().replace(" ","-") + "-vic")
+    results  = []
+
+    for page in range(1, pages + 1):
+        url = f"https://www.domain.com.au/sale/{slug}/?page={page}"
+        logger.info(f"[scraper] FOR SALE {suburb} page {page} → {url}")
+        resp = _get(url)
+        if not resp:
             break
 
-        try:
-            data     = json.loads(nd_match.group(1))
-            pp       = data.get("props", {}).get("pageProps", {})
-            raw_list = _extract_listings(pp)
-        except (json.JSONDecodeError, Exception) as e:
-            log.warning(f"  JSON parse error: {e}")
+        data = _extract_next_data(resp.text)
+        if not data:
+            logger.warning(f"No __NEXT_DATA__ found for {url}")
             break
 
-        log.info(f"  {len(raw_list)} raw listings on page {pg}")
-        if not raw_list:
-            break   # no more pages
+        batch = _walk_next_data(data, suburb)
+        if not batch:
+            break
 
-        for raw in raw_list:
-            try:
-                rec = _parse_record(raw, suburb)
-                if rec:
-                    records.append(rec)
-            except Exception as e:
-                log.debug(f"  row err: {e}")
+        results.extend(batch)
+        logger.info(f"[scraper]   ↳ {len(batch)} listings found (total {len(results)})")
 
-        pg += 1
-        time.sleep(random.uniform(3.0, 6.0))
-
-    log.info(f"[{suburb}] {len(records)} valid records")
-    return records
+    return results
 
 
-def run_scraper(suburbs, max_pages=3, headless=True):
-    """Public entry point called from agent.py."""
-    cookies     = _load_cookies()
-    session     = cf.Session()
+def scrape_sold(suburb: str, pages: int = 3) -> list[dict]:
+    """Scrape recently sold listings for a suburb."""
+    slug     = SUBURB_SLUGS.get(suburb, suburb.lower().replace(" ","-") + "-vic")
+    results  = []
+
+    for page in range(1, pages + 1):
+        url = f"https://www.domain.com.au/sold-listings/{slug}/?page={page}"
+        logger.info(f"[scraper] SOLD {suburb} page {page} → {url}")
+        resp = _get(url)
+        if not resp:
+            break
+
+        data = _extract_next_data(resp.text)
+        if not data:
+            logger.warning(f"No __NEXT_DATA__ found for {url}")
+            break
+
+        batch = _walk_next_data(data, suburb)
+        if not batch:
+            break
+
+        # Tag sold listings
+        for r in batch:
+            r["source"] = "domain_sold"
+
+        results.extend(batch)
+        logger.info(f"[scraper]   ↳ {len(batch)} sold listings (total {len(results)})")
+
+    return results
+
+
+def run_scraper(suburbs: list[str], sold_pages: int = 2, sale_pages: int = 2) -> list[dict]:
+    """
+    Main entry point — scrapes both for-sale and sold listings
+    for all target suburbs. Returns cleaned, deduplicated records.
+    """
+    from propiq.simulator import clean_records
+
     all_records = []
+    logging.basicConfig(level=logging.INFO)
 
     for suburb in suburbs:
-        recs = _scrape_suburb(session, cookies, suburb, max_pages)
-        all_records.extend(recs)
-        time.sleep(random.uniform(4.0, 8.0))
+        print(f"  [scraper] Scraping {suburb}...")
 
-    log.info(f"Scrape complete — {len(all_records)} total records")
-    return all_records
+        # For-sale listings
+        sale = scrape_for_sale(suburb, pages=sale_pages)
+        print(f"  [scraper]   For sale : {len(sale)}")
+        all_records.extend(sale)
+
+        # Sold listings (confirmed prices — better for scoring)
+        sold = scrape_sold(suburb, pages=sold_pages)
+        print(f"  [scraper]   Sold     : {len(sold)}")
+        all_records.extend(sold)
+
+    # Deduplicate across suburbs
+    seen = set()
+    unique = []
+    for r in all_records:
+        if r["listing_id"] not in seen:
+            seen.add(r["listing_id"])
+            unique.append(r)
+
+    print(f"  [scraper] Total unique records: {len(unique)}")
+
+    # Fall back to simulator if scraper got nothing (e.g. blocked)
+    if len(unique) < 10:
+        print("  [scraper] ⚠️  Too few results — falling back to simulator")
+        from propiq.simulator import simulate_listings
+        unique = simulate_listings()
+
+    return clean_records(unique)
 
 
+# ── CLI test ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import sys
-    subs    = sys.argv[1:] or ["Fitzroy"]
-    results = run_scraper(subs, max_pages=2)
-
-    print(f"\nGot {len(results)} records")
-    for r in results[:5]:
-        print(f"  {r['suburb']} | {r['address']} | ${r['sale_price']:,.0f}")
-
-    if results:
-        Path("data").mkdir(exist_ok=True)
-        Path("data/scrape_test.json").write_text(json.dumps(results, indent=2))
-        print("Saved → data/scrape_test.json")
-    else:
-        print("0 records — check data/debug_page.html for what REA returned")
+    test_suburbs = ["Fitzroy", "Richmond", "Hawthorn"]
+    records = run_scraper(test_suburbs, sold_pages=1, sale_pages=1)
+    print(f"Scraped {len(records)} records:")
+    for r in records[:5]:
+        print(f" - {r['address']}, {r['suburb']} : ${r['sale_price']}")

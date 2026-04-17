@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropIQ — Dashboard</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.395.0/dist/umd/lucide.min.js"></script>
+<style>
+:root,[data-theme="light"]{
+  --bg:#f7f6f2;--surface:#f9f8f5;--surface-2:#fbfbf9;
+  --surface-off:#f3f0ec;--surface-dyn:#e6e4df;
+  --border:#d4d1ca;--divider:#dcd9d5;
+  --text:#28251d;--muted:#7a7974;--faint:#bab9b4;
+  --primary:#01696f;--primary-h:#0c4e54;--primary-hi:#cedcd8;
+  --success:#437a22;--success-hi:#d4dfcc;
+  --warning:#964219;--warning-hi:#ddcfc6;
+  --error:#a12c7b;--error-hi:#e0ced7;
+  --orange:#da7101;--orange-hi:#e7d7c4;
+  --shadow-sm:0 1px 2px oklch(0.2 0.01 80/.06);
+  --shadow-md:0 4px 12px oklch(0.2 0.01 80/.08);
+  --shadow-lg:0 12px 32px oklch(0.2 0.01 80/.12);
+  --r-sm:.375rem;--r-md:.5rem;--r-lg:.75rem;--r-xl:1rem;
+  --font-body:'Satoshi','Inter',sans-serif;
+  --font-display:'Cabinet Grotesk','Satoshi',sans-serif;
+  --transition:180ms cubic-bezier(.16,1,.3,1);
+}
+[data-theme="dark"]{
+  --bg:#171614;--surface:#1c1b19;--surface-2:#201f1d;
+  --surface-off:#1d1c1a;--surface-dyn:#2d2c2a;
+  --border:#393836;--divider:#262523;
+  --text:#cdccca;--muted:#797876;--faint:#5a5957;
+  --primary:#4f98a3;--primary-h:#227f8b;--primary-hi:#313b3b;
+  --success:#6daa45;--success-hi:#3a4435;
+  --warning:#bb653b;--warning-hi:#564942;
+  --error:#d163a7;--error-hi:#4c3d46;
+  --orange:#fdab43;--orange-hi:#564b3e;
+  --shadow-sm:0 1px 2px oklch(0 0 0/.2);
+  --shadow-md:0 4px 12px oklch(0 0 0/.3);
+  --shadow-lg:0 12px 32px oklch(0 0 0/.4);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
+body{min-height:100dvh;font-family:var(--font-body);font-size:1rem;
+  color:var(--text);background:var(--bg);display:flex}
+
+/* ── Sidebar ── */
+.sidebar{width:220px;min-height:100dvh;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  padding:1.5rem 1rem;gap:.25rem;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:.6rem;margin-bottom:1.5rem;
+  font-family:var(--font-display);font-size:1.2rem;font-weight:800;color:var(--text)}
+.logo svg{color:var(--primary)}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;
+  border-radius:var(--r-md);cursor:pointer;font-size:.9rem;font-weight:500;
+  color:var(--muted);transition:all var(--transition);border:none;background:none;
+  text-align:left;width:100%}
+.nav-item:hover{background:var(--surface-dyn);color:var(--text)}
+.nav-item.active{background:var(--primary-hi);color:var(--primary)}
+.nav-item i{width:16px;height:16px;flex-shrink:0}
+.sidebar-footer{margin-top:auto;display:flex;align-items:center;
+  justify-content:space-between;padding-top:1rem;
+  border-top:1px solid var(--divider)}
+.theme-btn{padding:.4rem;border-radius:var(--r-sm);color:var(--muted);
+  cursor:pointer;border:none;background:none;
+  transition:all var(--transition)}
+.theme-btn:hover{color:var(--text);background:var(--surface-dyn)}
+
+/* ── Main ── */
+.main{flex:1;overflow-y:auto;padding:2rem}
+.page{display:none}.page.active{display:block}
+.page-title{font-family:var(--font-display);font-size:1.6rem;font-weight:800;
+  margin-bottom:1.5rem;color:var(--text)}
+
+/* ── KPI row ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:1rem;margin-bottom:2rem}
+.kpi{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:1.25rem 1.5rem;
+  box-shadow:var(--shadow-sm)}
+.kpi-label{font-size:.8rem;color:var(--muted);font-weight:500;
+  text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem}
+.kpi-value{font-family:var(--font-display);font-size:1.8rem;font-weight:800;
+  color:var(--text);font-variant-numeric:tabular-nums}
+.kpi-sub{font-size:.78rem;color:var(--muted);margin-top:.25rem}
+
+/* ── Section card ── */
+.card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);box-shadow:var(--shadow-sm);
+  margin-bottom:1.5rem;overflow:hidden}
+.card-header{display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 1.25rem;border-bottom:1px solid var(--divider)}
+.card-title{font-weight:700;font-size:.95rem;display:flex;align-items:center;gap:.5rem}
+.card-title i{color:var(--primary);width:16px;height:16px}
+.refresh-btn{padding:.3rem .5rem;border-radius:var(--r-sm);
+  background:none;border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;font-size:.78rem;
+  display:flex;align-items:center;gap:.3rem;
+  transition:all var(--transition)}
+.refresh-btn:hover{border-color:var(--primary);color:var(--primary)}
+
+/* ── Table ── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{padding:.7rem 1rem;text-align:left;font-size:.75rem;
+  color:var(--muted);font-weight:600;text-transform:uppercase;
+  letter-spacing:.04em;border-bottom:1px solid var(--divider);
+  white-space:nowrap}
+td{padding:.75rem 1rem;border-bottom:1px solid var(--divider);
+  vertical-align:middle;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface-off)}
+.truncate{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;padding:.2rem .55rem;
+  border-radius:var(--r-full,9999px);font-size:.72rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em}
+.badge-pending {background:var(--orange-hi);color:var(--orange)}
+.badge-sold    {background:var(--success-hi);color:var(--success)}
+.badge-withdrawn{background:var(--surface-dyn);color:var(--muted)}
+.badge-done    {background:var(--success-hi);color:var(--success)}
+.badge-running {background:var(--primary-hi);color:var(--primary)}
+.badge-error   {background:var(--error-hi);color:var(--error)}
+.badge-hit     {background:var(--success-hi);color:var(--success)}
+.badge-miss    {background:var(--error-hi);color:var(--error)}
+
+/* ── Performance score bar ── */
+.score-bar-wrap{display:flex;align-items:center;gap:.5rem}
+.score-bar{height:6px;border-radius:3px;background:var(--surface-dyn);
+  flex:1;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--primary),var(--success));
+  transition:width .5s ease}
+.score-num{font-size:.8rem;color:var(--muted);min-width:2.5rem;text-align:right}
+
+/* ── Variance chip ── */
+.var-chip{font-size:.78rem;font-weight:600;padding:.15rem .4rem;
+  border-radius:var(--r-sm)}
+.var-pos{background:var(--success-hi);color:var(--success)}
+.var-neg{background:var(--error-hi);color:var(--error)}
+.var-null{color:var(--muted)}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:oklch(0 0 0/.55);
+  display:none;align-items:center;justify-content:center;z-index:999;
+  padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);box-shadow:var(--shadow-lg);
+  width:100%;max-width:680px;max-height:90dvh;overflow-y:auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;
+  padding:1.25rem 1.5rem;border-bottom:1px solid var(--divider)}
+.modal-title{font-weight:700;font-size:1rem}
+.modal-close{padding:.35rem;border-radius:var(--r-sm);border:none;
+  background:none;color:var(--muted);cursor:pointer;
+  transition:all var(--transition)}
+.modal-close:hover{background:var(--surface-dyn);color:var(--text)}
+.modal-body{padding:1.5rem;display:flex;flex-direction:column;gap:1rem}
+.detail-row{display:flex;flex-direction:column;gap:.3rem}
+.detail-label{font-size:.75rem;color:var(--muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em}
+.detail-value{font-size:.9rem;line-height:1.5}
+.detail-value.answer{background:var(--surface-off);border-radius:var(--r-md);
+  padding:.75rem 1rem;font-size:.85rem;white-space:pre-wrap}
+
+/* ── Outcome form ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.form-group{display:flex;flex-direction:column;gap:.4rem}
+.form-label{font-size:.78rem;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em}
+.form-input{padding:.55rem .75rem;border-radius:var(--r-md);
+  border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text);font-size:.9rem;outline:none;
+  transition:border-color var(--transition)}
+.form-input:focus{border-color:var(--primary)}
+.btn{padding:.55rem 1.1rem;border-radius:var(--r-md);font-size:.85rem;
+  font-weight:600;cursor:pointer;border:none;
+  transition:all var(--transition);display:inline-flex;
+  align-items:center;gap:.4rem}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-h)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+.btn-row{display:flex;gap:.75rem;justify-content:flex-end;
+  padding-top:.5rem;border-top:1px solid var(--divider)}
+
+/* ── Chat ── */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100dvh - 6rem)}
+.chat-messages{flex:1;overflow-y:auto;padding:1rem;
+  display:flex;flex-direction:column;gap:.75rem}
+.msg{max-width:75%;padding:.75rem 1rem;border-radius:var(--r-lg);
+  font-size:.9rem;line-height:1.55}
+.msg-user{align-self:flex-end;background:var(--primary);color:#fff;
+  border-bottom-right-radius:var(--r-sm)}
+.msg-ai{align-self:flex-start;background:var(--surface-off);
+  border-bottom-left-radius:var(--r-sm)}
+.chat-input-row{display:flex;gap:.75rem;padding:1rem;
+  border-top:1px solid var(--divider);align-items:flex-end}
+.chat-input{flex:1;padding:.65rem 1rem;border-radius:var(--r-lg);
+  border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text);font-size:.9rem;outline:none;resize:none;
+  min-height:44px;max-height:120px;
+  transition:border-color var(--transition)}
+.chat-input:focus{border-color:var(--primary)}
+.send-btn{padding:.65rem .9rem;border-radius:var(--r-lg);
+  background:var(--primary);color:#fff;border:none;cursor:pointer;
+  transition:background var(--transition)}
+.send-btn:hover{background:var(--primary-h)}
+
+/* ── Empty state ── */
+.empty{display:flex;flex-direction:column;align-items:center;
+  text-align:center;padding:3rem 2rem;color:var(--muted);gap:.75rem}
+.empty i{width:40px;height:40px;color:var(--faint)}
+.empty p{font-size:.85rem;max-width:30ch}
+
+/* ── Loading shimmer ── */
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.skeleton{background:linear-gradient(90deg,
+  var(--surface-off) 25%,var(--surface-dyn) 50%,var(--surface-off) 75%);
+  background-size:200% 100%;animation:shimmer 1.5s ease-in-out infinite;
+  border-radius:var(--r-sm)}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="PropIQ Logo">
+      <rect width="28" height="28" rx="7" fill="currentColor" class="text-primary" style="color:var(--primary)"/>
+      <path d="M7 20V10l7-4 7 4v10" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M11 20v-5h6v5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+      <circle cx="14" cy="11" r="1.5" fill="#fff"/>
+    </svg>
+    PropIQ
+  </div>
+
+  <button class="nav-item active" data-page="overview" onclick="showPage('overview',this)">
+    <i data-lucide="layout-dashboard"></i> Overview
+  </button>
+  <button class="nav-item" data-page="market" onclick="showPage('market',this)">
+    <i data-lucide="bar-chart-2"></i> Market
+  </button>
+  <button class="nav-item" data-page="performance" onclick="showPage('performance',this)">
+    <i data-lucide="target"></i> Performance
+  </button>
+  <button class="nav-item" data-page="decisions" onclick="showPage('decisions',this)">
+    <i data-lucide="brain"></i> Decisions
+  </button>
+  <button class="nav-item" data-page="chat" onclick="showPage('chat',this)">
+    <i data-lucide="message-square"></i> Chat
+  </button>
+  <button class="nav-item" data-page="pipeline" onclick="showPage('pipeline',this)">
+    <i data-lucide="play-circle"></i> Pipeline
+  </button>
+
+  <div class="sidebar-footer">
+    <span style="font-size:.75rem;color:var(--faint)">v0.2.0</span>
+    <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
+      <i data-lucide="moon" width="16" height="16"></i>
+    </button>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- ── Overview ── -->
+  <div class="page active" id="page-overview">
+    <div class="page-title">Overview</div>
+    <div class="kpi-grid" id="overview-kpis">
+      <div class="kpi"><div class="kpi-label">Tracked Outcomes</div><div class="kpi-value skeleton" id="kpi-tracked">–</div></div>
+      <div class="kpi"><div class="kpi-label">Hit Rate</div><div class="kpi-value skeleton" id="kpi-hitrate">–</div><div class="kpi-sub" id="kpi-hitrate-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Avg Variance</div><div class="kpi-value skeleton" id="kpi-variance">–</div></div>
+      <div class="kpi"><div class="kpi-label">AI Decisions</div><div class="kpi-value skeleton" id="kpi-convs">–</div></div>
+      <div class="kpi"><div class="kpi-label">Pipeline Runs</div><div class="kpi-value skeleton" id="kpi-runs">–</div></div>
+      <div class="kpi"><div class="kpi-label">Total Tokens</div><div class="kpi-value skeleton" id="kpi-tokens">–</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="clock"></i> Recent Decisions</div>
+        <button class="refresh-btn" onclick="loadDecisions()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>Question</th><th>Model</th><th>Tokens</th></tr></thead>
+          <tbody id="recent-convs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Market ── -->
+  <div class="page" id="page-market">
+    <div class="page-title">Market Context</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="map-pin"></i> Top Scored Listings</div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input id="suburb-filter" class="form-input" style="width:180px;padding:.3rem .6rem;font-size:.82rem" placeholder="Filter suburb…" oninput="loadMarket()">
+          <button class="refresh-btn" onclick="loadMarket()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i></button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Address</th><th>Suburb</th><th>Price</th><th>Score</th><th>Yield</th><th>Bed/Bath</th><th>Track</th></tr></thead>
+          <tbody id="market-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Performance ── -->
+  <div class="page" id="page-performance">
+    <div class="page-title">Performance</div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">Total Tracked</div><div class="kpi-value" id="p-tracked">–</div></div>
+      <div class="kpi"><div class="kpi-label">Sold</div><div class="kpi-value" id="p-sold">–</div></div>
+      <div class="kpi"><div class="kpi-label">Pending</div><div class="kpi-value" id="p-pending">–</div></div>
+      <div class="kpi"><div class="kpi-label">Hit Rate</div><div class="kpi-value" id="p-hitrate">–</div><div class="kpi-sub" id="p-hitrate-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Avg Variance</div><div class="kpi-value" id="p-variance">–</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="target"></i> Outcome Log</div>
+        <div style="display:flex;gap:.5rem">
+          <select id="outcome-filter" class="form-input" style="padding:.3rem .6rem;font-size:.82rem" onchange="loadOutcomes()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="sold">Sold</option>
+            <option value="withdrawn">Withdrawn</option>
+          </select>
+          <button class="refresh-btn" onclick="loadOutcomes()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i></button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Address</th><th>Suburb</th><th>Pred. Price</th>
+            <th>Actual Sale</th><th>Variance</th><th>Score</th>
+            <th>Status</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="outcomes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Decisions ── -->
+  <div class="page" id="page-decisions">
+    <div class="page-title">Decisions</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="message-square"></i> Conversation Log</div>
+        <button class="refresh-btn" onclick="loadDecisions()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Timestamp</th><th>Question</th><th>Model</th><th>Tokens</th><th>Suburbs</th><th>Detail</th></tr></thead>
+          <tbody id="convs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="play-circle"></i> Pipeline Run History</div>
+        <button class="refresh-btn" onclick="loadPipelineHistory()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Run ID</th><th>Suburbs</th><th>Started</th><th>Duration</th><th>Listings</th><th>Status</th></tr></thead>
+          <tbody id="runs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat ── -->
+  <div class="page" id="page-chat">
+    <div class="page-title">Chat with PropIQ</div>
+    <div class="card" style="height:calc(100dvh - 9rem);display:flex;flex-direction:column">
+      <div class="chat-messages" id="chat-messages">
+        <div class="msg msg-ai">👋 Hi! Ask me anything about the scored properties — suburb rankings, undervalued picks, investment tips.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chat-input" rows="1" placeholder="Ask about suburbs, scores, investment picks…"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+        <button class="send-btn" onclick="sendChat()"><i data-lucide="send" style="width:18px;height:18px"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Pipeline ── -->
+  <div class="page" id="page-pipeline">
+    <div class="page-title">Run Pipeline</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="play-circle"></i> Launch New Run</div>
+      </div>
+      <div style="padding:1.25rem;display:flex;flex-direction:column;gap:1rem">
+        <div class="form-group">
+          <label class="form-label">Suburbs (comma-separated)</label>
+          <input class="form-input" id="pipeline-suburbs" placeholder="Fitzroy, Richmond, Brunswick, Prahran">
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="runPipeline()">
+            <i data-lucide="play" style="width:14px;height:14px"></i> Start Pipeline
+          </button>
+        </div>
+        <div id="pipeline-msg" style="font-size:.85rem;color:var(--muted)"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i data-lucide="activity"></i> Status</div>
+        <button class="refresh-btn" onclick="loadPipelineStatus()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i></button>
+      </div>
+      <div style="padding:1.25rem" id="pipeline-status-display">Loading…</div>
+    </div>
+  </div>
+
+</main><!-- /main -->
+
+<!-- ── Conversation detail modal ── -->
+<div class="modal-overlay" id="conv-modal" onclick="if(event.target===this)closeConvModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Decision Detail</span>
+      <button class="modal-close" onclick="closeConvModal()"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+    </div>
+    <div class="modal-body" id="conv-modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Outcome sale modal ── -->
+<div class="modal-overlay" id="outcome-modal" onclick="if(event.target===this)closeOutcomeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="outcome-modal-title">Record Actual Sale</span>
+      <button class="modal-close" onclick="closeOutcomeModal()"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Actual Sale Price ($)</label>
+        <input class="form-input" type="number" id="om-actual-sale" placeholder="850000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sale Date</label>
+        <input class="form-input" type="date" id="om-actual-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input class="form-input" id="om-notes" placeholder="e.g. sold at auction">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeOutcomeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSale()">
+          <i data-lucide="check" style="width:14px;height:14px"></i> Save Sale
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Track outcome modal ── -->
+<div class="modal-overlay" id="track-modal" onclick="if(event.target===this)closeTrackModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Track This Property</span>
+      <button class="modal-close" onclick="closeTrackModal()"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="track-modal-info" style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem"></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Predicted Price ($)</label>
+          <input class="form-input" type="number" id="tm-price" placeholder="Auto-filled">
+        </div>
+        <div class="form-group">
+          <label class="form-label">PropIQ Score</label>
+          <input class="form-input" type="number" id="tm-score" step="0.01" placeholder="Auto-filled">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <input class="form-input" id="tm-notes" placeholder="e.g. identified via Brunswick query">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeTrackModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitTrack()">
+          <i data-lucide="bookmark-plus" style="width:14px;height:14px"></i> Track Property
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let _currentOutcomeId = null;
+let _currentTrackListing = null;
+
+// ── Nav ────────────────────────────────────────────────────────────────────
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'overview')    { loadOverview(); }
+  if (id === 'market')      { loadMarket(); }
+  if (id === 'performance') { loadOutcomes(); loadOutcomeStats(); }
+  if (id === 'decisions')   { loadDecisions(); loadPipelineHistory(); }
+  if (id === 'pipeline')    { loadPipelineStatus(); }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const fmt = v => v == null ? '–' : '$' + Number(v).toLocaleString();
+const fmtScore = v => v == null ? '–' : Number(v).toFixed(2);
+const fmtDate = s => s ? s.replace('T',' ').slice(0,16) : '–';
+
+function varianceChip(v) {
+  if (v == null) return '<span class="var-null">–</span>';
+  const cls = v >= 0 ? 'var-pos' : 'var-neg';
+  const sign = v >= 0 ? '+' : '';
+  return `<span class="var-chip ${cls}">${sign}${v}%</span>`;
+}
+
+function duration(start, end) {
+  if (!start || !end) return '–';
+  const ms = new Date(end) - new Date(start);
+  const s = Math.round(ms / 1000);
+  return s < 60 ? s + 's' : Math.round(s/60) + 'm ' + (s%60) + 's';
+}
+
+// ── Overview ───────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const [statsR, convsR, runsR] = await Promise.all([
+    fetch(API+'/api/outcomes/stats').then(r=>r.json()).catch(()=>({})),
+    fetch(API+'/api/chat/history?limit=5').then(r=>r.json()).catch(()=>({conversations:[]})),
+    fetch(API+'/api/pipeline/history?limit=5').then(r=>r.json()).catch(()=>({runs:[]})),
+  ]);
+
+  document.getElementById('kpi-tracked').textContent = statsR.total_tracked ?? 0;
+  document.getElementById('kpi-hitrate').textContent =
+    statsR.hit_rate_pct != null ? statsR.hit_rate_pct + '%' : 'N/A';
+  document.getElementById('kpi-hitrate-sub').textContent =
+    statsR.resolved ? statsR.resolved + ' resolved' : 'no sales yet';
+  document.getElementById('kpi-variance').textContent =
+    statsR.avg_variance_pct != null
+      ? (statsR.avg_variance_pct >= 0 ? '+' : '') + statsR.avg_variance_pct.toFixed(1) + '%'
+      : 'N/A';
+
+  const convs = convsR.conversations || [];
+  let totalTokens = 0;
+  convs.forEach(c => { totalTokens += c.tokens || 0; });
+  document.getElementById('kpi-convs').textContent = statsR.total_tracked !== undefined
+    ? (await fetch(API+'/api/chat/history?limit=200').then(r=>r.json()).catch(()=>({conversations:[]}))).conversations.length
+    : convs.length;
+  document.getElementById('kpi-runs').textContent = (runsR.runs||[]).length;
+  document.getElementById('kpi-tokens').textContent =
+    totalTokens > 999 ? (totalTokens/1000).toFixed(1)+'K' : totalTokens;
+
+  const tbody = document.getElementById('recent-convs-tbody');
+  if (!convs.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><i data-lucide="inbox"></i><p>No AI decisions yet — use Chat tab</p></div></td></tr>`;
+  } else {
+    tbody.innerHTML = convs.map(c => `
+      <tr>
+        <td style="color:var(--muted);font-size:.8rem">${fmtDate(c.timestamp)}</td>
+        <td class="truncate">${escHtml(c.question)}</td>
+        <td style="font-size:.8rem;color:var(--muted)">${c.model||'–'}</td>
+        <td>${c.tokens||0}</td>
+      </tr>`).join('');
+  }
+  lucide.createIcons();
+}
+
+// ── Market ─────────────────────────────────────────────────────────────────
+async function loadMarket() {
+  const suburb = document.getElementById('suburb-filter').value.trim();
+  const url = suburb
+    ? `${API}/api/market-context?suburb=${encodeURIComponent(suburb)}&limit=50`
+    : `${API}/api/market-context?limit=50`;
+  const data = await fetch(url).then(r=>r.json()).catch(()=>({top_listings:[]}));
+  const listings = data.top_listings || [];
+  const tbody = document.getElementById('market-tbody');
+  if (!listings.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><i data-lucide="search-x"></i><p>No listings. Run the pipeline first.</p></div></td></tr>`;
+    lucide.createIcons(); return;
+  }
+  tbody.innerHTML = listings.map(l => `
+    <tr>
+      <td class="truncate">${escHtml(l.address||'–')}</td>
+      <td>${escHtml(l.suburb||'–')}</td>
+      <td>${fmt(l.sale_price)}</td>
+      <td>
+        <div class="score-bar-wrap">
+          <div class="score-bar"><div class="score-bar-fill" style="width:${Math.min(100,(l.inv_score||0)/3*100)}%"></div></div>
+          <span class="score-num">${fmtScore(l.inv_score)}</span>
+        </div>
+      </td>
+      <td>${l.yield_proxy != null ? (l.yield_proxy*100).toFixed(1)+'%' : '–'}</td>
+      <td>${l.bedrooms||'–'} / ${l.bathrooms||'–'}</td>
+      <td>
+        <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.75rem"
+          onclick="openTrackModal(${JSON.stringify(l).replace(/"/g,'&quot;')})">
+          <i data-lucide="bookmark-plus" style="width:12px;height:12px"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+  lucide.createIcons();
+}
+
+// ── Performance / Outcomes ─────────────────────────────────────────────────
+async function loadOutcomeStats() {
+  const s = await fetch(API+'/api/outcomes/stats').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('p-tracked').textContent  = s.total_tracked ?? 0;
+  document.getElementById('p-sold').textContent     = s.total_sold ?? 0;
+  document.getElementById('p-pending').textContent  = s.total_pending ?? 0;
+  document.getElementById('p-hitrate').textContent  = s.hit_rate_pct != null ? s.hit_rate_pct + '%' : 'N/A';
+  document.getElementById('p-hitrate-sub').textContent = s.resolved ? s.resolved + ' resolved' : 'no sales yet';
+  document.getElementById('p-variance').textContent = s.avg_variance_pct != null
+    ? (s.avg_variance_pct >= 0 ? '+' : '') + s.avg_variance_pct.toFixed(1) + '%' : 'N/A';
+}
+
+async function loadOutcomes() {
+  loadOutcomeStats();
+  const filter = document.getElementById('outcome-filter').value;
+  const url = filter
+    ? `${API}/api/outcomes?status=${filter}&limit=100`
+    : `${API}/api/outcomes?limit=100`;
+  const data = await fetch(url).then(r=>r.json()).catch(()=>({outcomes:[]}));
+  const outcomes = data.outcomes || [];
+  const tbody = document.getElementById('outcomes-tbody');
+  if (!outcomes.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><i data-lucide="target"></i><p>No outcomes tracked yet — use the Track button in Market tab</p></div></td></tr>`;
+    lucide.createIcons(); return;
+  }
+  tbody.innerHTML = outcomes.map(o => `
+    <tr>
+      <td class="truncate">${escHtml(o.address||o.listing_id.slice(0,8))}</td>
+      <td>${escHtml(o.suburb||'–')}</td>
+      <td>${fmt(o.predicted_price)}</td>
+      <td>${fmt(o.actual_sale)}</td>
+      <td>${varianceChip(o.variance_pct)}</td>
+      <td>
+        <div class="score-bar-wrap">
+          <div class="score-bar"><div class="score-bar-fill" style="width:${Math.min(100,(o.inv_score||0)/3*100)}%"></div></div>
+          <span class="score-num">${fmtScore(o.inv_score)}</span>
+        </div>
+      </td>
+      <td><span class="badge badge-${o.status}">${o.status}</span></td>
+      <td>
+        ${o.status === 'pending' ? `
+          <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.75rem"
+            onclick="openOutcomeModal('${o.outcome_id}','${escAttr(o.address||o.listing_id)}')">
+            <i data-lucide="check-circle" style="width:12px;height:12px"></i> Sold
+          </button>
+          <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.75rem;margin-left:.25rem"
+            onclick="doWithdraw('${o.outcome_id}')">
+            <i data-lucide="x-circle" style="width:12px;height:12px"></i>
+          </button>` : `<span style="color:var(--faint);font-size:.78rem">–</span>`}
+      </td>
+    </tr>`).join('');
+  lucide.createIcons();
+}
+
+// ── Decisions ──────────────────────────────────────────────────────────────
+async function loadDecisions() {
+  const data = await fetch(API+'/api/chat/history?limit=50').then(r=>r.json()).catch(()=>({conversations:[]}));
+  const convs = data.conversations || [];
+  const tbody = document.getElementById('convs-tbody');
+  if (!convs.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><i data-lucide="inbox"></i><p>No conversations logged yet</p></div></td></tr>`;
+    lucide.createIcons(); return;
+  }
+  tbody.innerHTML = convs.map(c => {
+    let suburbs = [];
+    try { suburbs = JSON.parse(c.suburbs_context||'[]'); } catch(e){}
+    return `<tr>
+      <td style="font-size:.78rem;color:var(--muted);white-space:nowrap">${fmtDate(c.timestamp)}</td>
+      <td class="truncate" style="max-width:260px">${escHtml(c.question)}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${c.model||'–'}</td>
+      <td>${c.tokens||0}</td>
+      <td style="font-size:.78rem;color:var(--muted)">${suburbs.slice(0,3).join(', ')}${suburbs.length>3?'…':''}</td>
+      <td>
+        <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.75rem"
+          onclick='openConvModal(${JSON.stringify(c)})'>
+          <i data-lucide="eye" style="width:12px;height:12px"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function loadPipelineHistory() {
+  const data = await fetch(API+'/api/pipeline/history?limit=20').then(r=>r.json()).catch(()=>({runs:[]}));
+  const runs = data.runs || [];
+  const tbody = document.getElementById('runs-tbody');
+  if (!runs.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><i data-lucide="play-circle"></i><p>No pipeline runs yet</p></div></td></tr>`;
+    lucide.createIcons(); return;
+  }
+  tbody.innerHTML = runs.map(r => {
+    let suburbs = [];
+    try { suburbs = JSON.parse(r.suburbs||'[]'); } catch(e){}
+    return `<tr>
+      <td style="font-family:monospace;font-size:.75rem;color:var(--muted)">${r.run_id.slice(0,8)}</td>
+      <td style="font-size:.82rem">${suburbs.join(', ')}</td>
+      <td style="font-size:.78rem;color:var(--muted)">${fmtDate(r.started_at)}</td>
+      <td style="font-size:.82rem">${duration(r.started_at,r.finished_at)}</td>
+      <td>${r.listings_found||0} / ${r.scores_written||0}</td>
+      <td><span class="badge badge-${r.status}">${r.status}</span></td>
+    </tr>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+let chatHistory = [];
+async function sendChat() {
+  const inp = document.getElementById('chat-input');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  appendMsg(msg, 'user');
+  chatHistory.push({role:'user', content:msg});
+  const thinking = appendMsg('Thinking…', 'ai');
+  const resp = await fetch(API+'/api/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message:msg, history:chatHistory.slice(-10)})
+  }).then(r=>r.json()).catch(e=>({reply:'Error: '+e.message}));
+  thinking.textContent = resp.reply || resp.detail || 'Error';
+  if (resp.reply) chatHistory.push({role:'assistant', content:resp.reply});
+}
+function appendMsg(text, role) {
+  const wrap = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  div.textContent = text;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  return div;
+}
+
+// ── Pipeline ───────────────────────────────────────────────────────────────
+async function runPipeline() {
+  const raw = document.getElementById('pipeline-suburbs').value;
+  const suburbs = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  if (!suburbs.length) { document.getElementById('pipeline-msg').textContent='Enter at least one suburb.'; return; }
+  const resp = await fetch(API+'/api/pipeline/run',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({suburbs})
+  }).then(r=>r.json()).catch(e=>({detail:e.message}));
+  document.getElementById('pipeline-msg').textContent =
+    resp.message || resp.detail || JSON.stringify(resp);
+  loadPipelineStatus();
+}
+async function loadPipelineStatus() {
+  const s = await fetch(API+'/api/pipeline/status').then(r=>r.json()).catch(()=>({}));
+  const el = document.getElementById('pipeline-status-display');
+  if (s.idle) {
+    el.innerHTML = '<span style="color:var(--success)">✓ Idle — no pipeline running</span>';
+  } else {
+    el.innerHTML = `<span style="color:var(--primary)">⟳ Running: ${(s.running||[]).join(', ')}</span>`;
+  }
+}
+
+// ── Modals ─────────────────────────────────────────────────────────────────
+function openConvModal(c) {
+  let suburbs=[],ids=[];
+  try{suburbs=JSON.parse(c.suburbs_context||'[]')}catch(e){}
+  try{ids=JSON.parse(c.top_property_ids||'[]')}catch(e){}
+  document.getElementById('conv-modal-body').innerHTML = `
+    <div class="detail-row"><div class="detail-label">Timestamp</div><div class="detail-value">${fmtDate(c.timestamp)}</div></div>
+    <div class="detail-row"><div class="detail-label">Question</div><div class="detail-value">${escHtml(c.question)}</div></div>
+    <div class="detail-row"><div class="detail-label">Answer</div><div class="detail-value answer">${escHtml(c.answer)}</div></div>
+    <div class="detail-row"><div class="detail-label">Model</div><div class="detail-value">${c.model} — ${c.tokens} tokens</div></div>
+    <div class="detail-row"><div class="detail-label">Suburbs Context</div><div class="detail-value">${suburbs.join(', ')||'–'}</div></div>
+    <div class="detail-row"><div class="detail-label">Top Property IDs</div><div class="detail-value" style="font-family:monospace;font-size:.78rem;word-break:break-all">${ids.join(', ')||'–'}</div></div>
+  `;
+  document.getElementById('conv-modal').classList.add('open');
+  lucide.createIcons();
+}
+function closeConvModal() { document.getElementById('conv-modal').classList.remove('open'); }
+
+function openOutcomeModal(id, address) {
+  _currentOutcomeId = id;
+  document.getElementById('outcome-modal-title').textContent = 'Record Sale — ' + address;
+  document.getElementById('om-actual-sale').value = '';
+  document.getElementById('om-actual-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('om-notes').value = '';
+  document.getElementById('outcome-modal').classList.add('open');
+}
+function closeOutcomeModal() { document.getElementById('outcome-modal').classList.remove('open'); }
+
+async function submitSale() {
+  const sale = parseFloat(document.getElementById('om-actual-sale').value);
+  if (!sale) { alert('Enter a valid sale price'); return; }
+  await fetch(`${API}/api/outcomes/${_currentOutcomeId}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      actual_sale: sale,
+      actual_date: document.getElementById('om-actual-date').value,
+      notes:       document.getElementById('om-notes').value||null
+    })
+  });
+  closeOutcomeModal();
+  loadOutcomes();
+}
+
+async function doWithdraw(id) {
+  if (!confirm('Mark this outcome as withdrawn?')) return;
+  await fetch(`${API}/api/outcomes/${id}/withdraw`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({notes:'Withdrawn from dashboard'})
+  });
+  loadOutcomes();
+}
+
+function openTrackModal(listing) {
+  _currentTrackListing = listing;
+  document.getElementById('track-modal-info').textContent =
+    `${listing.address||''} — ${listing.suburb||''}`;
+  document.getElementById('tm-price').value  = listing.sale_price  || '';
+  document.getElementById('tm-score').value  = listing.inv_score != null ? Number(listing.inv_score).toFixed(2) : '';
+  document.getElementById('tm-notes').value  = '';
+  document.getElementById('track-modal').classList.add('open');
+}
+function closeTrackModal() { document.getElementById('track-modal').classList.remove('open'); }
+
+async function submitTrack() {
+  const l = _currentTrackListing;
+  const resp = await fetch(`${API}/api/outcomes`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      listing_id:      l.listing_id,
+      predicted_price: parseFloat(document.getElementById('tm-price').value)||null,
+      predicted_score: parseFloat(document.getElementById('tm-score').value)||null,
+      notes:           document.getElementById('tm-notes').value||null
+    })
+  }).then(r=>r.json()).catch(e=>({detail:e.message}));
+  closeTrackModal();
+  if (resp.outcome_id) {
+    showPage('performance', document.querySelector('[data-page="performance"]'));
+  }
+}
+
+// ── Sanitize ───────────────────────────────────────────────────────────────
+function escHtml(s){ const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+function escAttr(s){ return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ── Theme toggle ────────────────────────────────────────────────────────────
+(function(){
+  const t=document.querySelector('[data-theme-toggle]'),r=document.documentElement;
+  let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+  r.setAttribute('data-theme',d);
+  if(t)t.addEventListener('click',()=>{
+    d=d==='dark'?'light':'dark';
+    r.setAttribute('data-theme',d);
+    t.innerHTML=d==='dark'
+      ? '<i data-lucide="sun" style="width:16px;height:16px"></i>'
+      : '<i data-lucide="moon" style="width:16px;height:16px"></i>';
+    lucide.createIcons();
+  });
+})();
+
+// ── Init ───────────────────────────────────────────────────────────────────
+lucide.createIcons();
+loadOverview();
+</script>
+</body>
+</html>

@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropIQ — Property Investment Dashboard</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root,[data-theme="light"]{
+  --color-bg:#f7f6f2;--color-surface:#f9f8f5;--color-surface-2:#fbfbf9;
+  --color-surface-offset:#f3f0ec;--color-surface-dynamic:#e6e4df;
+  --color-divider:#dcd9d5;--color-border:#d4d1ca;
+  --color-text:#28251d;--color-text-muted:#7a7974;--color-text-faint:#bab9b4;
+  --color-primary:#01696f;--color-primary-hover:#0c4e54;
+  --color-primary-highlight:#cedcd8;
+  --color-success:#437a22;--color-warning:#964219;--color-error:#a12c7b;
+  --color-gold:#d19900;--color-blue:#006494;--color-purple:#7a39bb;
+  --shadow-sm:0 1px 2px oklch(0.2 0.01 80/0.06);
+  --shadow-md:0 4px 12px oklch(0.2 0.01 80/0.08);
+  --shadow-lg:0 12px 32px oklch(0.2 0.01 80/0.12);
+  --radius-sm:.375rem;--radius-md:.5rem;--radius-lg:.75rem;--radius-xl:1rem;
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;
+  --space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;
+  --space-12:3rem;--space-16:4rem;
+  --text-xs:clamp(.75rem,.7rem + .25vw,.875rem);
+  --text-sm:clamp(.875rem,.8rem + .35vw,1rem);
+  --text-base:clamp(1rem,.95rem + .25vw,1.125rem);
+  --text-lg:clamp(1.125rem,1rem + .75vw,1.5rem);
+  --text-xl:clamp(1.5rem,1.2rem + 1.25vw,2.25rem);
+  --font-body:'Satoshi','Inter',sans-serif;
+  --transition:180ms cubic-bezier(0.16,1,0.3,1);
+  --sidebar-w:220px;
+}
+[data-theme="dark"]{
+  --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#201f1d;
+  --color-surface-offset:#1d1c1a;--color-surface-dynamic:#2d2c2a;
+  --color-divider:#262523;--color-border:#393836;
+  --color-text:#cdccca;--color-text-muted:#797876;--color-text-faint:#5a5957;
+  --color-primary:#4f98a3;--color-primary-hover:#227f8b;
+  --color-primary-highlight:#313b3b;
+  --color-success:#6daa45;--color-warning:#bb653b;--color-error:#d163a7;
+  --color-gold:#e8af34;--color-blue:#5591c7;--color-purple:#a86fdf;
+  --shadow-sm:0 1px 2px oklch(0 0 0/.2);
+  --shadow-md:0 4px 12px oklch(0 0 0/.3);
+  --shadow-lg:0 12px 32px oklch(0 0 0/.4);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font-body);font-size:var(--text-sm);color:var(--color-text);
+  background:var(--color-bg);-webkit-font-smoothing:antialiased}
+button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
+input,textarea{font:inherit;color:inherit}
+*{transition:color var(--transition),background var(--transition),
+  border-color var(--transition),box-shadow var(--transition)}
+
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;
+  grid-template-rows:auto 1fr;height:100dvh}
+
+/* SIDEBAR */
+.sidebar{grid-row:1/-1;background:var(--color-surface);
+  border-right:1px solid var(--color-border);
+  display:flex;flex-direction:column;overflow-y:auto}
+.sidebar-logo{display:flex;align-items:center;gap:var(--space-3);
+  padding:var(--space-6) var(--space-5);border-bottom:1px solid var(--color-border)}
+.logo-text{font-size:var(--text-base);font-weight:700;letter-spacing:-.02em}
+.logo-sub{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px}
+.nav{padding:var(--space-4) 0;flex:1}
+.nav-section{padding:var(--space-3) var(--space-5) var(--space-1);
+  font-size:var(--text-xs);font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--color-text-faint)}
+.nav-item{display:flex;align-items:center;gap:var(--space-3);
+  padding:var(--space-3) var(--space-5);font-size:var(--text-sm);font-weight:500;
+  color:var(--color-text-muted);cursor:pointer;border:none;background:none;
+  width:100%;text-align:left;position:relative}
+.nav-item:hover{color:var(--color-text);background:var(--color-surface-offset)}
+.nav-item.active{color:var(--color-primary);background:var(--color-primary-highlight)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;
+  width:3px;background:var(--color-primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.nav-badge{margin-left:auto;background:var(--color-primary-highlight);
+  color:var(--color-primary);border-radius:9999px;padding:1px 7px;
+  font-size:var(--text-xs);font-weight:700}
+.sidebar-footer{padding:var(--space-4) var(--space-5);
+  border-top:1px solid var(--color-border)}
+
+/* HEADER */
+.header{grid-column:2;background:var(--color-surface);
+  border-bottom:1px solid var(--color-border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 var(--space-8);height:56px;position:sticky;top:0;z-index:10}
+.header-left{display:flex;align-items:center;gap:var(--space-4)}
+.header-title{font-size:var(--text-base);font-weight:600}
+.breadcrumb{font-size:var(--text-xs);color:var(--color-text-muted)}
+.header-actions{display:flex;align-items:center;gap:var(--space-3)}
+
+/* MAIN */
+.main{grid-column:2;overflow-y:auto;padding:var(--space-8);background:var(--color-bg)}
+.page{display:none}
+.page.active{display:block}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-2) var(--space-4);border-radius:var(--radius-md);
+  font-size:var(--text-sm);font-weight:500;border:none;cursor:pointer}
+.btn-primary{background:var(--color-primary);color:#fff}
+.btn-primary:hover{background:var(--color-primary-hover)}
+.btn-ghost{background:transparent;border:1px solid var(--color-border);color:var(--color-text-muted)}
+.btn-ghost:hover{background:var(--color-surface-offset);color:var(--color-text)}
+.btn-sm{padding:var(--space-1) var(--space-3);font-size:var(--text-xs)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.icon-btn{padding:var(--space-2);border-radius:var(--radius-md);color:var(--color-text-muted)}
+.icon-btn:hover{background:var(--color-surface-offset);color:var(--color-text)}
+
+/* BADGE */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px var(--space-2);
+  border-radius:9999px;font-size:var(--text-xs);font-weight:500}
+.badge-green{background:color-mix(in oklch,var(--color-success) 15%,transparent);color:var(--color-success)}
+.badge-yellow{background:color-mix(in oklch,var(--color-gold) 15%,transparent);color:var(--color-gold)}
+.badge-red{background:color-mix(in oklch,var(--color-error) 15%,transparent);color:var(--color-error)}
+.badge-blue{background:color-mix(in oklch,var(--color-blue) 15%,transparent);color:var(--color-blue)}
+.badge-purple{background:color-mix(in oklch,var(--color-purple) 15%,transparent);color:var(--color-purple)}
+.badge-muted{background:var(--color-surface-dynamic);color:var(--color-text-muted)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+  gap:var(--space-4);margin-bottom:var(--space-8)}
+.kpi-card{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm)}
+.kpi-label{font-size:var(--text-xs);color:var(--color-text-muted);font-weight:500;
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)}
+.kpi-value{font-size:var(--text-xl);font-weight:700;
+  font-variant-numeric:tabular-nums lining-nums;line-height:1}
+.kpi-sub{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)}
+
+/* SECTION HEADER */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)}
+.section-title{font-size:var(--text-base);font-weight:600}
+
+/* SUBURB CARDS */
+.suburb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:var(--space-4);margin-bottom:var(--space-8)}
+.suburb-card{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm);cursor:pointer}
+.suburb-card:hover{box-shadow:var(--shadow-md);border-color:var(--color-primary)}
+.suburb-rank{font-size:var(--text-xs);color:var(--color-text-faint);font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-1)}
+.suburb-name{font-size:var(--text-base);font-weight:700;margin-bottom:var(--space-3)}
+.suburb-stats{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.suburb-stat-label{font-size:var(--text-xs);color:var(--color-text-muted)}
+.suburb-stat-value{font-size:var(--text-sm);font-weight:600;font-variant-numeric:tabular-nums}
+.score-bar{height:4px;background:var(--color-surface-dynamic);border-radius:9999px;
+  margin-top:var(--space-3);overflow:hidden}
+.score-fill{height:100%;background:var(--color-primary);border-radius:9999px;
+  transition:width .6s cubic-bezier(0.16,1,0.3,1)}
+
+/* TABLE */
+.table-wrap{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:var(--space-8)}
+.table-toolbar{display:flex;align-items:center;justify-content:space-between;
+  padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border);flex-wrap:wrap;gap:var(--space-3)}
+.search-input{background:var(--color-surface-offset);border:1px solid var(--color-border);
+  border-radius:var(--radius-md);padding:var(--space-2) var(--space-4);
+  font-size:var(--text-sm);outline:none;width:220px}
+.search-input::placeholder{color:var(--color-text-faint)}
+.search-input:focus{border-color:var(--color-primary)}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:var(--text-xs);color:var(--color-text-muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em;padding:var(--space-3) var(--space-4);
+  text-align:left;background:var(--color-surface-offset);
+  border-bottom:1px solid var(--color-border);cursor:pointer;white-space:nowrap}
+.tbl th:hover{color:var(--color-text)}
+.tbl td{padding:var(--space-3) var(--space-4);font-size:var(--text-sm);
+  border-bottom:1px solid var(--color-divider);font-variant-numeric:tabular-nums}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:var(--color-surface-offset)}
+.tbl-scroll{max-height:440px;overflow-y:auto}
+
+/* CHART */
+.chart-card{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-6);box-shadow:var(--shadow-sm);margin-bottom:var(--space-8)}
+.chart-wrap{position:relative;height:220px}
+
+/* CHAT */
+.chat-layout{display:flex;flex-direction:column;height:calc(100dvh - 56px - var(--space-16));
+  background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.chat-messages{flex:1;overflow-y:auto;padding:var(--space-6);
+  display:flex;flex-direction:column;gap:var(--space-4)}
+.msg{display:flex;gap:var(--space-3);max-width:720px}
+.msg.user{flex-direction:row-reverse;align-self:flex-end}
+.msg-avatar{width:32px;height:32px;border-radius:9999px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:var(--text-xs);font-weight:700;background:var(--color-surface-dynamic)}
+.msg.user .msg-avatar{background:var(--color-primary);color:#fff}
+.msg-bubble{background:var(--color-surface-offset);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);
+  font-size:var(--text-sm);line-height:1.6;max-width:560px;white-space:pre-wrap}
+.msg.user .msg-bubble{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.chat-input-bar{border-top:1px solid var(--color-border);padding:var(--space-4);
+  display:flex;gap:var(--space-3);align-items:flex-end}
+.chat-textarea{flex:1;background:var(--color-surface-offset);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);
+  font-size:var(--text-sm);resize:none;outline:none;max-height:120px;line-height:1.5}
+.chat-textarea::placeholder{color:var(--color-text-faint)}
+.chat-textarea:focus{border-color:var(--color-primary)}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+.typing-indicator span{display:inline-block;width:6px;height:6px;
+  background:var(--color-text-muted);border-radius:9999px;margin:0 2px;
+  animation:bounce .9s ease-in-out infinite}
+.typing-indicator span:nth-child(2){animation-delay:.15s}
+.typing-indicator span:nth-child(3){animation-delay:.3s}
+
+/* PIPELINE */
+.pipeline-card{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-8);box-shadow:var(--shadow-sm);margin-bottom:var(--space-6)}
+.tag-input-wrap{display:flex;flex-wrap:wrap;gap:var(--space-2);
+  background:var(--color-surface-offset);border:1px solid var(--color-border);
+  border-radius:var(--radius-md);padding:var(--space-2);min-height:44px;cursor:text;align-items:center}
+.tag-input-wrap:focus-within{border-color:var(--color-primary)}
+.suburb-tag{display:inline-flex;align-items:center;gap:4px;
+  background:var(--color-primary-highlight);color:var(--color-primary);
+  border-radius:9999px;padding:2px var(--space-2);font-size:var(--text-xs);font-weight:500}
+.tag-input-inner{border:none;outline:none;background:transparent;
+  font-size:var(--text-sm);min-width:120px}
+.status-row{display:flex;align-items:center;gap:var(--space-3);
+  padding:var(--space-4);background:var(--color-surface-offset);
+  border:1px solid var(--color-border);border-radius:var(--radius-md)}
+@keyframes pulse-anim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.pulse{width:8px;height:8px;border-radius:9999px;background:var(--color-success);
+  animation:pulse-anim 1.5s ease-in-out infinite}
+.pulse.idle{background:var(--color-text-faint);animation:none}
+
+/* DECISIONS */
+.decisions-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);margin-bottom:var(--space-8)}
+@media(max-width:900px){.decisions-grid{grid-template-columns:1fr}}
+.conv-card{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm);
+  display:flex;flex-direction:column;gap:var(--space-3)}
+.conv-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2)}
+.conv-ts{font-size:var(--text-xs);color:var(--color-text-faint)}
+.conv-q{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
+.conv-a{font-size:var(--text-xs);color:var(--color-text-muted);
+  line-height:1.6;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.conv-footer{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.run-row{display:flex;align-items:center;gap:var(--space-4);
+  padding:var(--space-4);background:var(--color-surface-offset);
+  border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:var(--space-3)}
+.run-info{flex:1;min-width:0}
+.run-suburbs{font-size:var(--text-sm);font-weight:500;margin-bottom:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-meta{font-size:var(--text-xs);color:var(--color-text-muted)}
+.run-stats{display:flex;gap:var(--space-4);flex-shrink:0}
+.run-stat{text-align:right}
+.run-stat-val{font-size:var(--text-sm);font-weight:700;font-variant-numeric:tabular-nums}
+.run-stat-label{font-size:var(--text-xs);color:var(--color-text-muted)}
+.modal-overlay{display:none;position:fixed;inset:0;background:oklch(0 0 0/.6);
+  z-index:100;align-items:center;justify-content:center;padding:var(--space-6)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--color-surface);border:1px solid var(--color-border);
+  border-radius:var(--radius-xl);padding:var(--space-8);max-width:640px;width:100%;
+  max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5)}
+.modal-q{font-size:var(--text-sm);font-weight:600;color:var(--color-text);margin-bottom:var(--space-3)}
+.modal-a{font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.7;white-space:pre-wrap}
+
+/* SKELETON */
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.skeleton{background:linear-gradient(90deg,
+  var(--color-surface-offset) 25%,var(--color-surface-dynamic) 50%,
+  var(--color-surface-offset) 75%);
+  background-size:200% 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:var(--radius-sm)}
+
+/* EMPTY */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:var(--space-16) var(--space-8);color:var(--color-text-muted)}
+.empty h3{color:var(--color-text);margin-bottom:var(--space-2);font-size:var(--text-base)}
+.empty p{font-size:var(--text-sm);max-width:36ch;margin-bottom:var(--space-6)}
+
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:9999px}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin 1s linear infinite}
+
+@media(max-width:768px){
+  :root{--sidebar-w:0px}
+  .sidebar{display:none}
+  .app{grid-template-columns:1fr}
+  .header,.main{grid-column:1}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="PropIQ">
+      <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
+      <path d="M8 22V12l8-5 8 5v10" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M13 22v-5h6v5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="16" cy="12" r="1.5" fill="#fff"/>
+    </svg>
+    <div>
+      <div class="logo-text">PropIQ</div>
+      <div class="logo-sub">Investment Engine</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">Analytics</div>
+    <button class="nav-item active" data-page="overview">
+      <i data-lucide="layout-dashboard" width="16" height="16"></i>Overview
+    </button>
+    <button class="nav-item" data-page="properties">
+      <i data-lucide="building-2" width="16" height="16"></i>Properties
+    </button>
+    <div class="nav-section" style="margin-top:var(--space-3)">Intelligence</div>
+    <button class="nav-item" data-page="chat">
+      <i data-lucide="message-square" width="16" height="16"></i>AI Analyst
+    </button>
+    <button class="nav-item" data-page="decisions">
+      <i data-lucide="brain" width="16" height="16"></i>Decisions
+      <span class="nav-badge" id="conv-count">—</span>
+    </button>
+    <div class="nav-section" style="margin-top:var(--space-3)">System</div>
+    <button class="nav-item" data-page="pipeline">
+      <i data-lucide="play-circle" width="16" height="16"></i>Pipeline
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div style="font-size:var(--text-xs);color:var(--color-text-faint)" id="sb-status">Checking API…</div>
+  </div>
+</aside>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <span class="header-title" id="page-title">Overview</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-sm btn-ghost" id="refresh-btn">
+      <i data-lucide="refresh-cw" width="14" height="14"></i>Refresh
+    </button>
+    <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+      <i data-lucide="sun" width="18" height="18"></i>
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- OVERVIEW -->
+  <div class="page active" id="page-overview">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Properties</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-sub">scored listings</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Suburbs</div>
+        <div class="kpi-value" id="kpi-suburbs">—</div>
+        <div class="kpi-sub">coverage areas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Score</div>
+        <div class="kpi-value" id="kpi-avg">—</div>
+        <div class="kpi-sub">investment index</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Top Score</div>
+        <div class="kpi-value" id="kpi-top">—</div>
+        <div class="kpi-sub">best pick</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Median Price</div>
+        <div class="kpi-value" id="kpi-price">—</div>
+        <div class="kpi-sub">across suburbs</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">AI Decisions</div>
+        <div class="kpi-value" id="kpi-convs">—</div>
+        <div class="kpi-sub">conversations logged</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="section-hdr">
+        <span class="section-title">Suburb Rankings — Avg Score</span>
+      </div>
+      <div class="chart-wrap"><canvas id="suburb-chart"></canvas></div>
+    </div>
+    <div class="section-hdr"><span class="section-title">Suburb Breakdown</span></div>
+    <div class="suburb-grid" id="suburb-grid">
+      <div class="empty"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- PROPERTIES -->
+  <div class="page" id="page-properties">
+    <div class="table-wrap">
+      <div class="table-toolbar">
+        <span class="section-title">Top Scored Properties</span>
+        <div style="display:flex;gap:var(--space-3);align-items:center">
+          <input type="text" class="search-input" id="prop-search" placeholder="Search address or suburb…">
+          <button class="btn btn-sm btn-ghost" id="export-btn">
+            <i data-lucide="download" width="14" height="14"></i>CSV
+          </button>
+        </div>
+      </div>
+      <div class="tbl-scroll">
+        <table class="tbl" id="prop-table">
+          <thead><tr>
+            <th data-col="rank">#</th>
+            <th data-col="address">Address</th>
+            <th data-col="suburb">Suburb</th>
+            <th data-col="inv_score">Score ↕</th>
+            <th data-col="sale_price">Price ↕</th>
+            <th data-col="bedrooms">Beds</th>
+            <th data-col="bathrooms">Baths</th>
+            <th data-col="land_size_sqm">Land m²</th>
+            <th data-col="yield_proxy">Yield</th>
+          </tr></thead>
+          <tbody id="prop-tbody">
+            <tr><td colspan="9" style="text-align:center;padding:var(--space-12);
+              color:var(--color-text-muted)">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="page" id="page-chat">
+    <div class="chat-layout">
+      <div class="chat-messages" id="chat-messages">
+        <div class="msg">
+          <div class="msg-avatar">
+            <svg width="16" height="16" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
+              <path d="M8 22V12l8-5 8 5v10" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="msg-bubble">
+            👋 Hi, I'm PropIQ — your Melbourne property investment analyst.<br><br>
+            I'm grounded in your live scored data. Ask me:<br>
+            • "Which suburb has the best ROI?"<br>
+            • "Top 3 undervalued properties in Brunswick"<br>
+            • "Compare Fitzroy vs Richmond scores"
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-bar">
+        <textarea class="chat-textarea" id="chat-input" rows="1"
+          placeholder="Ask PropIQ anything about your properties…"></textarea>
+        <button class="btn btn-primary" id="chat-send">
+          <i data-lucide="send" width="14" height="14"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISIONS (EPISODIC MEMORY) -->
+  <div class="page" id="page-decisions">
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
+      <div class="kpi-card">
+        <div class="kpi-label">Conversations</div>
+        <div class="kpi-value" id="dec-total-convs">—</div>
+        <div class="kpi-sub">decisions logged</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pipeline Runs</div>
+        <div class="kpi-value" id="dec-total-runs">—</div>
+        <div class="kpi-sub">episodes recorded</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Last Decision</div>
+        <div class="kpi-value" id="dec-last" style="font-size:var(--text-sm)">—</div>
+        <div class="kpi-sub">most recent query</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Tokens</div>
+        <div class="kpi-value" id="dec-tokens">—</div>
+        <div class="kpi-sub">consumed by LLM</div>
+      </div>
+    </div>
+
+    <div class="decisions-grid">
+      <!-- CONVERSATIONS -->
+      <div>
+        <div class="section-hdr">
+          <span class="section-title">
+            <i data-lucide="message-square" width="15" height="15"
+              style="display:inline;vertical-align:middle;margin-right:6px"></i>
+            AI Conversation Log
+          </span>
+          <button class="btn btn-sm btn-ghost" id="refresh-convs">
+            <i data-lucide="refresh-cw" width="12" height="12"></i>
+          </button>
+        </div>
+        <div id="conv-list"><div class="empty"><p>No conversations yet</p></div></div>
+      </div>
+
+      <!-- PIPELINE RUNS -->
+      <div>
+        <div class="section-hdr">
+          <span class="section-title">
+            <i data-lucide="play-circle" width="15" height="15"
+              style="display:inline;vertical-align:middle;margin-right:6px"></i>
+            Pipeline Run History
+          </span>
+          <button class="btn btn-sm btn-ghost" id="refresh-runs">
+            <i data-lucide="refresh-cw" width="12" height="12"></i>
+          </button>
+        </div>
+        <div id="run-list"><div class="empty"><p>No runs yet</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="page" id="page-pipeline">
+    <div class="pipeline-card">
+      <div class="section-hdr"><span class="section-title">Run Pipeline</span></div>
+      <p style="color:var(--color-text-muted);font-size:var(--text-sm);margin-bottom:var(--space-5);max-width:60ch">
+        Select suburbs to scrape, enrich, and score. Each run is logged as an episode in Decisions.
+      </p>
+      <label style="font-size:var(--text-xs);font-weight:600;text-transform:uppercase;
+        letter-spacing:.05em;color:var(--color-text-muted);display:block;margin-bottom:var(--space-2)">
+        Target Suburbs
+      </label>
+      <div class="tag-input-wrap" id="tag-wrap">
+        <input type="text" class="tag-input-inner" id="suburb-input" placeholder="Type suburb + Enter…">
+      </div>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-3)">
+        <span style="font-size:var(--text-xs);color:var(--color-text-muted)">Quick add:</span>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Fitzroy')">Fitzroy</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Richmond')">Richmond</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Brunswick')">Brunswick</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Hawthorn')">Hawthorn</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('South Yarra')">South Yarra</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Collingwood')">Collingwood</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('St Kilda')">St Kilda</button>
+        <button class="badge badge-muted" style="cursor:pointer" onclick="addSuburb('Northcote')">Northcote</button>
+      </div>
+      <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);align-items:center">
+        <button class="btn btn-primary" id="run-btn">
+          <i data-lucide="play" width="14" height="14"></i>Run Pipeline
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="selectedSuburbs=[];renderTags()">Clear</button>
+      </div>
+    </div>
+    <div class="pipeline-card">
+      <div class="section-hdr"><span class="section-title">Live Status</span></div>
+      <div class="status-row">
+        <div class="pulse idle" id="pulse"></div>
+        <span id="status-text" style="font-size:var(--text-sm)">Idle — no pipeline running</span>
+      </div>
+      <div id="running-suburbs" style="margin-top:var(--space-4);display:flex;gap:var(--space-2);flex-wrap:wrap"></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- CONVERSATION DETAIL MODAL -->
+<div class="modal-overlay" id="conv-modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span style="font-size:var(--text-base);font-weight:600">Decision Detail</span>
+      <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" width="18" height="18"></i></button>
+    </div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+const API = '';  // same origin if served via FastAPI, else 'http://localhost:8000'
+let allData = [], suburbSummary = [], chatHistory = [];
+let chartInstance = null;
+let selectedSuburbs = [];
+let sortCol = 'inv_score', sortDir = -1;
+let statusInterval = null;
+
+// ── PAGES ───────────────────────────────────────────────────
+const pageTitles = {overview:'Overview',properties:'Properties',
+  chat:'AI Analyst',decisions:'Decisions',pipeline:'Pipeline'};
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-'+page).classList.add('active');
+    document.getElementById('page-title').textContent = pageTitles[page];
+    if (page === 'decisions') loadDecisions();
+  });
+});
+
+// ── THEME ────────────────────────────────────────────────────
+const html = document.documentElement;
+const themeBtn = document.getElementById('theme-toggle');
+let dark = true;
+themeBtn.addEventListener('click', () => {
+  dark = !dark;
+  html.setAttribute('data-theme', dark ? 'dark' : 'light');
+  themeBtn.innerHTML = dark
+    ? '<i data-lucide="sun" width="18" height="18"></i>'
+    : '<i data-lucide="moon" width="18" height="18"></i>';
+  lucide.createIcons();
+  if (chartInstance) updateChart(suburbSummary);
+});
+
+// ── HEALTH ───────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/health`);
+    const j = await r.json();
+    document.getElementById('sb-status').textContent =
+      j.status === 'ok' ? `● API v${j.version||'?'}` : '○ API error';
+  } catch { document.getElementById('sb-status').textContent = '○ API offline'; }
+}
+
+// ── LOAD DATA ────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const r = await fetch(`${API}/api/market-context?limit=100`);
+    const d = await r.json();
+    allData = d.top_properties || [];
+    suburbSummary = d.suburb_rankings || [];
+    updateKPIs(d);
+    renderSuburbs(suburbSummary);
+    updateChart(suburbSummary);
+    renderTable(allData);
+  } catch(e) { console.error('Load error:', e); }
+  // Also update conv count badge
+  try {
+    const r2 = await fetch(`${API}/api/chat/history?limit=200`);
+    const d2 = await r2.json();
+    const cnt = (d2.conversations||[]).length;
+    document.getElementById('conv-count').textContent = cnt || '0';
+    document.getElementById('kpi-convs').textContent = cnt;
+  } catch {}
+}
+
+// ── KPIs ─────────────────────────────────────────────────────
+function updateKPIs(d) {
+  document.getElementById('kpi-total').textContent =
+    (allData.length || '—').toLocaleString();
+  document.getElementById('kpi-suburbs').textContent = suburbSummary.length || '—';
+  const scores = allData.map(p => p.inv_score||0).filter(Boolean);
+  const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2) : '—';
+  document.getElementById('kpi-avg').textContent = avg;
+  document.getElementById('kpi-top').textContent =
+    scores.length ? Math.max(...scores).toFixed(2) : '—';
+  const prices = allData.map(p=>p.sale_price||0).filter(Boolean).sort((a,b)=>a-b);
+  const med = prices.length ? prices[Math.floor(prices.length/2)] : 0;
+  document.getElementById('kpi-price').textContent = med ? '$'+Math.round(med/1000)+'K' : '—';
+}
+
+// ── SUBURB CARDS ─────────────────────────────────────────────
+function renderSuburbs(subs) {
+  const el = document.getElementById('suburb-grid');
+  if (!subs.length) {
+    el.innerHTML = `<div class="empty">
+      <i data-lucide="map-pin" width="40" height="40" style="color:var(--color-text-faint);margin-bottom:var(--space-4)"></i>
+      <h3>No suburb data</h3><p>Run the pipeline to score properties.</p>
+      <button class="btn btn-primary" onclick="navTo('pipeline')">Run Pipeline</button>
+    </div>`;
+    lucide.createIcons(); return;
+  }
+  const maxScore = Math.max(...subs.map(s=>s.avg_score||0));
+  el.innerHTML = subs.map((s,i) => {
+    const pct = maxScore > 0 ? (s.avg_score/maxScore*100).toFixed(0) : 0;
+    const cls = i===0?'badge-green':i<3?'badge-yellow':'badge-muted';
+    const lbl = i===0?'Top Pick':i<3?'Strong':'Watch';
+    return `<div class="suburb-card" onclick="filterBySuburb('${s.suburb}')">
+      <div class="suburb-rank">#${i+1}<span class="badge ${cls}" style="margin-left:6px">${lbl}</span></div>
+      <div class="suburb-name">${s.suburb}</div>
+      <div class="suburb-stats">
+        <div><div class="suburb-stat-label">Avg Score</div>
+          <div class="suburb-stat-value">${(s.avg_score||0).toFixed(2)}</div></div>
+        <div><div class="suburb-stat-label">Listings</div>
+          <div class="suburb-stat-value">${s.count||0}</div></div>
+        <div><div class="suburb-stat-label">Median</div>
+          <div class="suburb-stat-value">$${Math.round((s.median_price||0)/1000)}K</div></div>
+        <div><div class="suburb-stat-label">Match%</div>
+          <div class="suburb-stat-value">${pct}%</div></div>
+      </div>
+      <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function navTo(page) { document.querySelector(`.nav-item[data-page="${page}"]`).click(); }
+function filterBySuburb(s) { navTo('properties'); document.getElementById('prop-search').value=s; applyFilter(); }
+
+// ── CHART ─────────────────────────────────────────────────────
+function updateChart(subs) {
+  const ctx = document.getElementById('suburb-chart').getContext('2d');
+  const isDark = html.getAttribute('data-theme')==='dark';
+  const textColor = isDark?'#797876':'#7a7974';
+  const gridColor = isDark?'#262523':'#dcd9d5';
+  const accent = isDark?'#4f98a3':'#01696f';
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type:'bar',
+    data:{labels:subs.map(s=>s.suburb),datasets:[{
+      label:'Avg Score',data:subs.map(s=>+(s.avg_score||0).toFixed(3)),
+      backgroundColor:subs.map((_,i)=>i===0?accent:(isDark?'#313b3b':'#cedcd8')),
+      borderRadius:6,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:v=>`Score: ${v.parsed.y.toFixed(3)}`}}},
+      scales:{x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:12}}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:12}},beginAtZero:true}}}
+  });
+}
+
+// ── TABLE ─────────────────────────────────────────────────────
+function renderTable(data) {
+  const sorted = [...data].sort((a,b)=>sortDir*((a[sortCol]||0)>(b[sortCol]||0)?1:-1));
+  const q = document.getElementById('prop-search').value.toLowerCase();
+  const filtered = q ? sorted.filter(p=>
+    (p.address||'').toLowerCase().includes(q)||(p.suburb||'').toLowerCase().includes(q)) : sorted;
+  const tbody = document.getElementById('prop-tbody');
+  if (!filtered.length) {
+    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:var(--space-12);color:var(--color-text-muted)">No properties found</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map((p,i) => {
+    const sc = (p.inv_score||0).toFixed(3);
+    const price = p.sale_price?'$'+Math.round(p.sale_price/1000)+'K':'—';
+    const col = p.inv_score>1.5?'var(--color-success)':p.inv_score>1.0?'var(--color-gold)':'var(--color-text-muted)';
+    const yld = p.yield_proxy?(p.yield_proxy*100).toFixed(1)+'%':'—';
+    return `<tr>
+      <td style="color:var(--color-text-muted)">${i+1}</td>
+      <td style="font-weight:500">${p.address||'—'}</td>
+      <td><span class="badge badge-muted">${p.suburb||'—'}</span></td>
+      <td><span style="color:${col};font-weight:700">${sc}</span></td>
+      <td>${price}</td><td>${p.bedrooms||'—'}</td><td>${p.bathrooms||'—'}</td>
+      <td>${p.land_size_sqm||'—'}</td><td>${yld}</td></tr>`;
+  }).join('');
+}
+
+document.querySelectorAll('.tbl th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    if (sortCol===th.dataset.col) sortDir*=-1; else{sortCol=th.dataset.col;sortDir=-1;}
+    renderTable(allData);
+  });
+});
+document.getElementById('prop-search').addEventListener('input', applyFilter);
+function applyFilter() { renderTable(allData); }
+document.getElementById('export-btn').addEventListener('click', () => {
+  const cols=['address','suburb','inv_score','sale_price','bedrooms','bathrooms','land_size_sqm','yield_proxy'];
+  const csv=[cols.join(','),...allData.map(p=>cols.map(c=>p[c]??'').join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='propiq-properties.csv'; a.click();
+});
+
+document.getElementById('refresh-btn').addEventListener('click', loadData);
+
+// ── CHAT ─────────────────────────────────────────────────────
+const chatInput = document.getElementById('chat-input');
+const chatSend  = document.getElementById('chat-send');
+const chatMsgs  = document.getElementById('chat-messages');
+
+chatInput.addEventListener('keydown', e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}});
+chatSend.addEventListener('click', sendChat);
+chatInput.addEventListener('input', ()=>{chatInput.style.height='auto';chatInput.style.height=Math.min(chatInput.scrollHeight,120)+'px';});
+
+function appendMsg(role, text) {
+  const isUser = role==='user';
+  const div = document.createElement('div');
+  div.className = 'msg'+(isUser?' user':'');
+  div.innerHTML = `<div class="msg-avatar">${isUser?'You':
+    `<svg width="16" height="16" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
+    <path d="M8 22V12l8-5 8 5v10" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</div>
+    <div class="msg-bubble">${text}</div>`;
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+function showTyping() {
+  const div=document.createElement('div'); div.className='msg'; div.id='typing';
+  div.innerHTML=`<div class="msg-avatar"><svg width="16" height="16" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
+    <path d="M8 22V12l8-5 8 5v10" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="msg-bubble typing-indicator"><span></span><span></span><span></span></div>`;
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+async function sendChat() {
+  const msg = chatInput.value.trim(); if (!msg) return;
+  chatInput.value=''; chatInput.style.height='auto';
+  appendMsg('user', msg);
+  chatHistory.push({role:'user',content:msg});
+  chatSend.disabled=true; showTyping();
+  try {
+    const r=await fetch(`${API}/api/chat`,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:msg,history:chatHistory.slice(-8)})});
+    const j=await r.json();
+    document.getElementById('typing')?.remove();
+    const reply=j.reply||j.detail||'Error';
+    appendMsg('assistant', reply);
+    chatHistory.push({role:'assistant',content:reply});
+    // update decisions badge
+    const cnt = parseInt(document.getElementById('conv-count').textContent||'0');
+    document.getElementById('conv-count').textContent = cnt+1;
+    document.getElementById('kpi-convs').textContent = cnt+1;
+  } catch {
+    document.getElementById('typing')?.remove();
+    appendMsg('assistant','⚠️ Could not reach API. Is the server running?');
+  }
+  chatSend.disabled=false;
+}
+
+// ── DECISIONS ───────────────────────────────────────────────
+async function loadDecisions() {
+  // Conversations
+  try {
+    const r = await fetch(`${API}/api/chat/history?limit=50`);
+    const d = await r.json();
+    const convs = d.conversations||[];
+    renderConvs(convs);
+    document.getElementById('dec-total-convs').textContent = convs.length;
+    document.getElementById('conv-count').textContent = convs.length;
+    document.getElementById('kpi-convs').textContent = convs.length;
+    if (convs.length) {
+      const ts = convs[0].timestamp;
+      document.getElementById('dec-last').textContent = fmtRelative(ts);
+    }
+    const totalTok = convs.reduce((a,c)=>a+(c.tokens||0),0);
+    document.getElementById('dec-tokens').textContent =
+      totalTok > 1000 ? (totalTok/1000).toFixed(1)+'K' : totalTok||'—';
+  } catch(e) { console.error(e); }
+
+  // Pipeline runs
+  try {
+    const r = await fetch(`${API}/api/pipeline/history?limit=20`);
+    const d = await r.json();
+    const runs = d.runs||[];
+    renderRuns(runs);
+    document.getElementById('dec-total-runs').textContent = runs.length;
+  } catch(e) { console.error(e); }
+}
+
+function renderConvs(convs) {
+  const el = document.getElementById('conv-list');
+  if (!convs.length) {
+    el.innerHTML=`<div class="empty" style="padding:var(--space-10)">
+      <i data-lucide="message-square" width="36" height="36" style="color:var(--color-text-faint);margin-bottom:var(--space-3)"></i>
+      <h3>No conversations yet</h3><p>Start chatting in AI Analyst to log decisions.</p>
+      <button class="btn btn-primary btn-sm" onclick="navTo('chat')">Open Chat</button>
+    </div>`;
+    lucide.createIcons(); return;
+  }
+  el.innerHTML = convs.map(c => {
+    const subs = safeJsonParse(c.suburbs_context,[]);
+    const ts = fmtRelative(c.timestamp);
+    return `<div class="conv-card" onclick="openConvModal(${JSON.stringify(c).replace(/"/g,'&quot;')})">
+      <div class="conv-meta">
+        <span class="badge badge-purple"><i data-lucide="brain" width="10" height="10"></i> AI</span>
+        <span class="conv-ts">${ts}</span>
+      </div>
+      <div class="conv-q">${escHtml(c.question)}</div>
+      <div class="conv-a">${escHtml(c.answer)}</div>
+      <div class="conv-footer">
+        <span class="badge badge-muted">${c.model||'?'}</span>
+        <span class="badge badge-muted">${c.tokens||0} tokens</span>
+        ${subs.slice(0,2).map(s=>`<span class="badge badge-blue">${s}</span>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function renderRuns(runs) {
+  const el = document.getElementById('run-list');
+  if (!runs.length) {
+    el.innerHTML=`<div class="empty" style="padding:var(--space-10)">
+      <i data-lucide="play-circle" width="36" height="36" style="color:var(--color-text-faint);margin-bottom:var(--space-3)"></i>
+      <h3>No runs yet</h3><p>Run the pipeline to log your first episode.</p>
+      <button class="btn btn-primary btn-sm" onclick="navTo('pipeline')">Run Pipeline</button>
+    </div>`;
+    lucide.createIcons(); return;
+  }
+  el.innerHTML = runs.map(r => {
+    const subs = safeJsonParse(r.suburbs,[]).join(', ');
+    const status = r.status;
+    const cls = status==='done'?'badge-green':status==='failed'?'badge-red':'badge-yellow';
+    const dur = r.finished_at && r.started_at
+      ? Math.round((new Date(r.finished_at)-new Date(r.started_at))/1000)+'s' : '—';
+    return `<div class="run-row">
+      <div class="run-info">
+        <div class="run-suburbs">${subs||'—'}</div>
+        <div class="run-meta">${fmtRelative(r.started_at)} · ${dur}</div>
+      </div>
+      <div class="run-stats">
+        <div class="run-stat">
+          <div class="run-stat-val">${r.listings_found||0}</div>
+          <div class="run-stat-label">found</div>
+        </div>
+        <div class="run-stat">
+          <span class="badge ${cls}">${status}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function openConvModal(c) {
+  const modal = document.getElementById('conv-modal');
+  const subs = safeJsonParse(c.suburbs_context,[]);
+  const topIds = safeJsonParse(c.top_property_ids,[]);
+  document.getElementById('modal-content').innerHTML = `
+    <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+      <span class="badge badge-muted">${fmtRelative(c.timestamp)}</span>
+      <span class="badge badge-muted">${c.model||'?'}</span>
+      <span class="badge badge-muted">${c.tokens||0} tokens</span>
+      ${subs.map(s=>`<span class="badge badge-blue">${s}</span>`).join('')}
+    </div>
+    <div class="modal-q">Question</div>
+    <div class="modal-a" style="margin-bottom:var(--space-5)">${escHtml(c.question)}</div>
+    <div class="modal-q">PropIQ Answer</div>
+    <div class="modal-a">${escHtml(c.answer)}</div>
+    ${topIds.length?`<div style="margin-top:var(--space-4)">
+      <div class="modal-q">Top Properties in Context</div>
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted);font-variant-numeric:tabular-nums">
+        ${topIds.slice(0,5).map((id,i)=>`<div style="padding:2px 0">${i+1}. ${id}</div>`).join('')}
+      </div></div>`:''}
+  `;
+  modal.classList.add('open');
+  lucide.createIcons();
+}
+
+function closeModal() { document.getElementById('conv-modal').classList.remove('open'); }
+document.getElementById('conv-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('conv-modal')) closeModal();
+});
+
+document.getElementById('refresh-convs').addEventListener('click', loadDecisions);
+document.getElementById('refresh-runs').addEventListener('click', loadDecisions);
+
+// ── PIPELINE ──────────────────────────────────────────────────
+function addSuburb(name) {
+  if (!name||selectedSuburbs.includes(name)) return;
+  selectedSuburbs.push(name); renderTags();
+}
+function removeSuburb(name) { selectedSuburbs=selectedSuburbs.filter(s=>s!==name); renderTags(); }
+function renderTags() {
+  const wrap = document.getElementById('tag-wrap');
+  const input = document.getElementById('suburb-input');
+  wrap.querySelectorAll('.suburb-tag').forEach(t=>t.remove());
+  selectedSuburbs.forEach(s => {
+    const tag=document.createElement('span'); tag.className='suburb-tag';
+    tag.innerHTML=`${s}<button onclick="removeSuburb('${s}')">
+      <i data-lucide="x" width="12" height="12"></i></button>`;
+    wrap.insertBefore(tag, input);
+  });
+  lucide.createIcons();
+}
+document.getElementById('suburb-input').addEventListener('keydown', e=>{
+  if (e.key==='Enter'||e.key===',') {
+    e.preventDefault();
+    const val=e.target.value.trim().replace(',','');
+    if(val){addSuburb(val);e.target.value='';}
+  }
+});
+document.getElementById('run-btn').addEventListener('click', async () => {
+  if (!selectedSuburbs.length){alert('Add at least one suburb');return;}
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true;
+  btn.innerHTML='<i data-lucide="loader-2" width="14" height="14" class="spin"></i>Starting…';
+  lucide.createIcons();
+  try {
+    await fetch(`${API}/api/pipeline/run`,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({suburbs:selectedSuburbs})});
+    startStatusPolling();
+  } catch { alert('Could not start pipeline.'); }
+  setTimeout(()=>{btn.disabled=false;btn.innerHTML='<i data-lucide="play" width="14" height="14"></i>Run Pipeline';lucide.createIcons();},3000);
+});
+
+function startStatusPolling() {
+  if (statusInterval) clearInterval(statusInterval);
+  statusInterval=setInterval(pollStatus,3000); pollStatus();
+}
+async function pollStatus() {
+  try {
+    const r=await fetch(`${API}/api/pipeline/status`);
+    const j=await r.json();
+    const running=j.running||[];
+    const pulse=document.getElementById('pulse');
+    const txt=document.getElementById('status-text');
+    const sub=document.getElementById('running-suburbs');
+    if(running.length){
+      pulse.classList.remove('idle');
+      txt.textContent=`Running — processing ${running.length} suburb${running.length>1?'s':''}…`;
+      sub.innerHTML=running.map(s=>`<span class="badge badge-blue">${s}</span>`).join('');
+    } else {
+      pulse.classList.add('idle'); txt.textContent='Idle — pipeline complete'; sub.innerHTML='';
+      clearInterval(statusInterval); loadData();
+    }
+  } catch {}
+}
+
+// ── UTILS ─────────────────────────────────────────────────────
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeJsonParse(s,def){ try{return JSON.parse(s);}catch{return def;} }
+function fmtRelative(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts.endsWith('Z')?ts:ts+'Z');
+  const diff = (Date.now()-d)/1000;
+  if (diff<60) return 'just now';
+  if (diff<3600) return Math.round(diff/60)+'m ago';
+  if (diff<86400) return Math.round(diff/3600)+'h ago';
+  return Math.round(diff/86400)+'d ago';
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+lucide.createIcons();
+checkHealth();
+loadData();
+startStatusPolling();
+</script>
+</body>
+</html>
