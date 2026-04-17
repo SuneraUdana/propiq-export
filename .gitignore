@@ -6,4 +6,4 @@ __pycache__/
 data/
 *.db
 .DS_Store
-design-test.html
+design-test.html.streamlit/
