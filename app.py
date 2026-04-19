@@ -121,8 +121,8 @@ def pipeline_run(body: PipelineRequest, background_tasks: BackgroundTasks):
         try:
             result = run_pipeline(suburbs)
             if isinstance(result, dict):
-                listings_found = result.get("listings_found", 0)
-                scores_written = result.get("scores_written", 0)
+                listings_found = len(result.get("records", []))
+                scores_written = len(result.get("scored", []))
             log_pipeline_finish(run_id, listings_found, scores_written, "done")
         except Exception as exc:
             log_pipeline_finish(run_id, listings_found, scores_written,
