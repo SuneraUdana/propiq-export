@@ -210,7 +210,7 @@ def json_report(
             "total":        0,
             "kpis":         {},
             "suburb_stats": [],
-            "top_listings": [],
+            "top_properties": [],
             "alerts":       [],
         }
 
@@ -307,6 +307,6 @@ def json_report(
         "total":        len(records),
         "kpis":         kpis,
         "suburb_stats": suburb_stats,
-        "top_listings": top_listings,
+        "top_properties": top_listings,
         "alerts":       alerts,
     }
