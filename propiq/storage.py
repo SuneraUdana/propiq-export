@@ -1,3 +1,4 @@
+import os
 """PropIQ — SQLite storage layer with episodic memory + outcome tracking."""
 from __future__ import annotations
 import sqlite3, json, uuid
