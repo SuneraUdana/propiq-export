@@ -38,28 +38,39 @@ def tool_use(state):
     state.log(f"Executing task: {name} (attempt {task['attempts']}/{MAX_RETRIES})")
 
     try:
-        if name == "ingest":
+        if name == 'ingest':
             from propiq.simulator import simulate_listings, clean_records
-            state["records"] = clean_records(simulate_listings())
-        elif name == "enrich":
+            state['records'] = clean_records(simulate_listings())
+
+        elif name == 'enrich':
             from propiq.enrichment import enrich_batch
-            state["enriched"] = enrich_batch(state["records"], verbose=True)
-        elif name == "optimise":
-            from propiq.optimizer import optimise_weights, _compute_features
+            from propiq.storage import upsert_listings
+            upsert_listings(state['records'])          # ← SAVE listings to DB
+            state['enriched'] = enrich_batch(state['records'], verbose=True)
+
+        elif name == 'optimise':
+            from propiq.optimizer import optimise_weights, compute_features
+            from propiq.storage import upsert_enrichments
+            upsert_enrichments(state['enriched'])      # ← SAVE enrichments to DB
             import numpy as np
-            records = state["enriched"]
+            records = state['enriched']
             sub_prices = defaultdict(list)
             for r in records:
-                if r.get("sale_price"): sub_prices[r["suburb"]].append(r["sale_price"])
-            sub_med = {s: np.median(v) for s,v in sub_prices.items()}
-            all_feats = [_compute_features(r, sub_med.get(r["suburb"],1_000_000)) for r in records]
-            state["weights"] = optimise_weights(all_feats, verbose=True)
-        elif name == "score":
+                if r.get('sale_price'):
+                    sub_prices[r['suburb']].append(r['sale_price'])
+            sub_med = {s: np.median(v) for s, v in sub_prices.items()}
+            all_feats = [compute_features(r, sub_med.get(r['suburb'], 1_000_000)) for r in records]
+            state['weights'] = optimise_weights(all_feats, verbose=True)
+
+        elif name == 'score':
             from propiq.optimizer import score_and_rank
-            state["scored"] = score_and_rank(state["enriched"], weights=state["weights"])
-        elif name == "report":
+            from propiq.storage import upsert_scores
+            state['scored'] = score_and_rank(state['enriched'], weights=state['weights'])
+            upsert_scores(state['scored'])             # ← SAVE scores to DB
+
+        elif name == 'report':
             from propiq.reporter import generate_report
-            state["report_path"] = generate_report(state["scored"])
+            state['report_path'] = generate_report(state['scored'])
 
         state["completed"].append(name)
         state.log(f"Task '{name}' completed ✓")
