@@ -45,9 +45,12 @@ def tool_use(state):
         elif name == 'enrich':
             from propiq.enrichment import enrich_batch
             from propiq.storage import upsert_listings
-            upsert_listings(state['records'])          # ← SAVE listings to DB
-            state['enriched'] = enrich_batch(state['records'], verbose=True)
-
+            for r in state['records']:
+                if 'image_url' not in r:
+                    r['image_url'] = ''
+            state['enriched'] = enrich_batch(state['records'],verbose=True)
+            upsert_listings(state['enriched'])
+            
         elif name == 'optimise':
             from propiq.optimizer import optimise_weights, compute_features
             from propiq.storage import upsert_enrichments
