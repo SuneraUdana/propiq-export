@@ -1,4 +1,4 @@
-"""PropIQ — Planner → Tool-Use → Reflection state machine (LangGraph pattern)"""
+"""PropIQ — Planner → Tool-Use → Reflection state machine"""
 import time, traceback
 from collections import defaultdict
 
@@ -29,39 +29,45 @@ def tool_use(state):
     if not state["task_queue"]:
         state["ok"] = True
         return state
-
     task = state["task_queue"].pop(0)
     name = task["name"]
     task["attempts"] += 1
     state.log(f"Executing task: {name} (attempt {task['attempts']}/{MAX_RETRIES})")
-
     try:
         if name == "ingest":
             from propiq.simulator import simulate_listings, clean_records
+            from propiq.storage import upsert_listings
             state["records"] = clean_records(simulate_listings())
+            upsert_listings(state["records"])
         elif name == "enrich":
             from propiq.enrichment import enrich_batch
+            from propiq.storage import upsert_enrichments
             state["enriched"] = enrich_batch(state["records"], verbose=True)
+            upsert_enrichments(state["enriched"])
         elif name == "optimise":
-            from propiq.optimizer import optimise_weights, _compute_features
-            import numpy as np
-            records = state["enriched"]
-            sub_prices = defaultdict(list)
-            for r in records:
-                if r.get("sale_price"): sub_prices[r["suburb"]].append(r["sale_price"])
-            sub_med = {s: np.median(v) for s,v in sub_prices.items()}
-            all_feats = [_compute_features(r, sub_med.get(r["suburb"],1_000_000)) for r in records]
-            state["weights"] = optimise_weights(all_feats, verbose=True)
+            try:
+                from propiq.optimizer import optimise_weights, _compute_features
+                import numpy as np
+                records = state["enriched"]
+                sub_prices = defaultdict(list)
+                for r in records:
+                    if r.get("sale_price"): sub_prices[r["suburb"]].append(r["sale_price"])
+                sub_med = {s: np.median(v) for s,v in sub_prices.items()}
+                all_feats = [_compute_features(r, sub_med.get(r["suburb"],1_000_000)) for r in records]
+                state["weights"] = optimise_weights(all_feats, verbose=True)
+            except Exception:
+                state.log("optimise skipped — using default weights")
+                state["weights"] = None
         elif name == "score":
             from propiq.optimizer import score_and_rank
+            from propiq.storage import upsert_scores
             state["scored"] = score_and_rank(state["enriched"], weights=state["weights"])
+            upsert_scores(state["scored"])
         elif name == "report":
             from propiq.reporter import generate_report
             state["report_path"] = generate_report(state["scored"])
-
         state["completed"].append(name)
         state.log(f"Task '{name}' completed ✓")
-
     except Exception as ex:
         state.log(f"Task '{name}' FAILED (attempt {task['attempts']}): {ex}")
         traceback.print_exc()
@@ -71,7 +77,6 @@ def tool_use(state):
         else:
             state.log(f"Task '{name}' gave up after {MAX_RETRIES} attempts — skipping.")
             state["failed_tasks"].append({"task": name, "error": str(ex)})
-
     return state
 
 def reflector(state):
@@ -95,17 +100,13 @@ def run_pipeline(target_suburbs):
     state = AgentState()
     print("\n" + "═"*60 + "\n PropIQ Agentic Pipeline — Starting\n" + "═"*60)
     state = planner(state, target_suburbs)
-
     while state["task_queue"]:
         state = tool_use(state)
-
     state = reflector(state)
-
     while not state["ok"] and state["retries"] < MAX_RETRIES:
         while state["task_queue"]:
             state = tool_use(state)
         state = reflector(state)
-
     status = "✓ SUCCESS" if state["ok"] else "✗ FAILED after max retries"
     if state["failed_tasks"]:
         print(f"  [agent] Skipped tasks: {[t['task'] for t in state['failed_tasks']]}")
