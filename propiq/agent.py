@@ -14,18 +14,16 @@ class AgentState(dict):
         self["log"].append(f"[{ts}] {msg}")
         print(f"  [agent] {msg}")
 
-
 def planner(state, target_suburbs):
     state.log(f"Planner activated → {target_suburbs}")
     state["task_queue"] = [
         {"name":"ingest",   "args":{"suburbs":target_suburbs}, "attempts":0},
-        {"name":"enrich",   "args":{},                         "attempts":0},
-        {"name":"optimise", "args":{},                         "attempts":0},
-        {"name":"score",    "args":{},                         "attempts":0},
-        {"name":"report",   "args":{},                         "attempts":0},
+        {"name":"enrich",   "args":{}, "attempts":0},
+        {"name":"optimise", "args":{}, "attempts":0},
+        {"name":"score",    "args":{}, "attempts":0},
+        {"name":"report",   "args":{}, "attempts":0},
     ]
     return state
-
 
 def tool_use(state):
     if not state["task_queue"]:
@@ -38,42 +36,28 @@ def tool_use(state):
     state.log(f"Executing task: {name} (attempt {task['attempts']}/{MAX_RETRIES})")
 
     try:
-        if name == 'ingest':
+        if name == "ingest":
             from propiq.simulator import simulate_listings, clean_records
-            state['records'] = clean_records(simulate_listings())
-
-        elif name == 'enrich':
+            state["records"] = clean_records(simulate_listings())
+        elif name == "enrich":
             from propiq.enrichment import enrich_batch
-            from propiq.storage import upsert_listings
-            for r in state['records']:
-                if 'image_url' not in r:
-                    r['image_url'] = ''
-            state['enriched'] = enrich_batch(state['records'],verbose=True)
-            upsert_listings(state['enriched'])
-            
-        elif name == 'optimise':
-            from propiq.optimizer import optimise_weights, compute_features
-            from propiq.storage import upsert_enrichments
-            upsert_enrichments(state['enriched'])      # ← SAVE enrichments to DB
+            state["enriched"] = enrich_batch(state["records"], verbose=True)
+        elif name == "optimise":
+            from propiq.optimizer import optimise_weights, _compute_features
             import numpy as np
-            records = state['enriched']
+            records = state["enriched"]
             sub_prices = defaultdict(list)
             for r in records:
-                if r.get('sale_price'):
-                    sub_prices[r['suburb']].append(r['sale_price'])
-            sub_med = {s: np.median(v) for s, v in sub_prices.items()}
-            all_feats = [compute_features(r, sub_med.get(r['suburb'], 1_000_000)) for r in records]
-            state['weights'] = optimise_weights(all_feats, verbose=True)
-
-        elif name == 'score':
+                if r.get("sale_price"): sub_prices[r["suburb"]].append(r["sale_price"])
+            sub_med = {s: np.median(v) for s,v in sub_prices.items()}
+            all_feats = [_compute_features(r, sub_med.get(r["suburb"],1_000_000)) for r in records]
+            state["weights"] = optimise_weights(all_feats, verbose=True)
+        elif name == "score":
             from propiq.optimizer import score_and_rank
-            from propiq.storage import upsert_scores
-            state['scored'] = score_and_rank(state['enriched'], weights=state['weights'])
-            upsert_scores(state['scored'])             # ← SAVE scores to DB
-
-        elif name == 'report':
+            state["scored"] = score_and_rank(state["enriched"], weights=state["weights"])
+        elif name == "report":
             from propiq.reporter import generate_report
-            state['report_path'] = generate_report(state['scored'])
+            state["report_path"] = generate_report(state["scored"])
 
         state["completed"].append(name)
         state.log(f"Task '{name}' completed ✓")
@@ -83,22 +67,21 @@ def tool_use(state):
         traceback.print_exc()
         if task["attempts"] < MAX_RETRIES:
             state.log(f"Retrying '{name}' ({task['attempts']}/{MAX_RETRIES})...")
-            state["task_queue"].insert(0, task)   # retry
+            state["task_queue"].insert(0, task)
         else:
             state.log(f"Task '{name}' gave up after {MAX_RETRIES} attempts — skipping.")
             state["failed_tasks"].append({"task": name, "error": str(ex)})
 
     return state
 
-
 def reflector(state):
     checks = {
-        'records_loaded':    len(state['records']) > 0,
-        'enrichment_done':   len(state['enriched']) >= len(state['records']),
-        'scored_gt_zero':    len(state['scored']) > 0,
-        'report_generated':  state['report_path'] is not None,
+        "records_loaded":   len(state["records"]) > 0,
+        "enrichment_done":  len(state["enriched"]) == len(state["records"]),
+        "scored_gt_zero":   len(state["scored"]) > 0,
+        "report_generated": state["report_path"] is not None,
     }
-    failed = [k for k, v in checks.items() if not v]
+    failed = [k for k,v in checks.items() if not v]
     if failed:
         state["retries"] += 1
         state.log(f"Reflection FAILED: {failed}  (retry {state['retries']}/{MAX_RETRIES})")
@@ -108,26 +91,21 @@ def reflector(state):
         state["ok"] = True
     return state
 
-
 def run_pipeline(target_suburbs):
     state = AgentState()
     print("\n" + "═"*60 + "\n PropIQ Agentic Pipeline — Starting\n" + "═"*60)
     state = planner(state, target_suburbs)
 
-    # Execute all tasks (each has its own retry counter)
     while state["task_queue"]:
         state = tool_use(state)
 
-    # Reflect on final state
     state = reflector(state)
 
-    # If reflection fails, re-queue only the failed checks (not all tasks)
     while not state["ok"] and state["retries"] < MAX_RETRIES:
         while state["task_queue"]:
             state = tool_use(state)
         state = reflector(state)
 
-    # Summary
     status = "✓ SUCCESS" if state["ok"] else "✗ FAILED after max retries"
     if state["failed_tasks"]:
         print(f"  [agent] Skipped tasks: {[t['task'] for t in state['failed_tasks']]}")
