@@ -1,6 +1,6 @@
-import os
 """PropIQ — SQLite storage layer with episodic memory + outcome tracking."""
 from __future__ import annotations
+import os
 import sqlite3, json, uuid
 from datetime import datetime
 from pathlib import Path
