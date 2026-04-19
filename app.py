@@ -207,3 +207,4 @@ def list_outcomes(
 def outcome_stats():
     """Aggregate performance: hit rate, avg variance, totals."""
     return fetch_outcome_stats()
+# rebuild

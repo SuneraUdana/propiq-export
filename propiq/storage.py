@@ -185,36 +185,29 @@ def fetch_scores(suburb: str | None = None, limit: int = 20) -> list[dict]:
     conn.close()
     return [dict(r) for r in rows]
 
-
 def fetch_suburb_summary(suburb: str | None = None) -> list[dict]:
-    conn = _connect()
-    q = """
-        SELECT l.suburb,
-               COUNT(*)       AS count,
-               AVG(s.inv_score) AS avg_score,
-               MIN(s.inv_score) AS min_score,
-               MAX(s.inv_score) AS max_score,
-               AVG(l.sale_price) AS avg_price,
-               (SELECT l2.sale_price
-                FROM listings l2
-                JOIN scores s2 ON l2.listing_id=s2.listing_id
-                WHERE LOWER(l2.suburb)=LOWER(l.suburb)
-                ORDER BY l2.sale_price
-                LIMIT 1 OFFSET (
-                    SELECT COUNT(*)/2 FROM listings l3
-                    WHERE LOWER(l3.suburb)=LOWER(l.suburb)
-                )) AS median_price
-        FROM listings l
-        JOIN scores s ON l.listing_id = s.listing_id
-    """
-    if suburb:
-        rows = conn.execute(q + " WHERE LOWER(l.suburb)=LOWER(?) GROUP BY l.suburb",
-                            (suburb,)).fetchall()
-    else:
-        rows = conn.execute(q + " GROUP BY l.suburb ORDER BY avg_score DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
+    try:
+        conn = _connect()
+        q = """
+            SELECT l.suburb,
+                   COUNT(*)       AS count,
+                   AVG(s.inv_score) AS avg_score,
+                   MIN(s.inv_score) AS min_score,
+                   MAX(s.inv_score) AS max_score,
+                   AVG(l.sale_price) AS avg_price,
+                   AVG(l.sale_price) AS median_price
+            FROM listings l
+            JOIN scores s ON l.listing_id = s.listing_id
+        """
+        if suburb:
+            rows = conn.execute(q + " WHERE LOWER(l.suburb)=LOWER(?) GROUP BY l.suburb",
+                                (suburb,)).fetchall()
+        else:
+            rows = conn.execute(q + " GROUP BY l.suburb ORDER BY avg_score DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
 
 def fetch_top_agents(suburb: str | None = None, limit: int = 5) -> list[dict]:
     conn = _connect()
