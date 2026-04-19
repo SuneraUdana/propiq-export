@@ -72,6 +72,23 @@ class OutcomeWithdrawRequest(BaseModel):
 @app.on_event("startup")
 def startup():
     init_db()
+    import os
+    from huggingface_hub import hf_hub_download
+    token = os.environ.get("HF_TOKEN","")
+    if token:
+        try:
+            from propiq.storage import DB_PATH
+            hf_hub_download(
+                repo_id="sunera01/propiq-db",
+                filename="propiq.db",
+                repo_type="dataset",
+                token=token,
+                local_dir=str(DB_PATH.parent),
+                local_dir_use_symlinks=False
+            )
+            print("[startup] DB loaded from HF dataset ✓")
+        except Exception as e:
+            print(f"[startup] No dataset DB yet: {e}")
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")
