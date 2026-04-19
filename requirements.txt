@@ -14,3 +14,4 @@ requests==2.32.3
 scipy
 cloudscraper
 
+huggingface_hub
