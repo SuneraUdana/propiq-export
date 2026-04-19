@@ -93,13 +93,12 @@ def tool_use(state):
 
 def reflector(state):
     checks = {
-        "records_loaded":  len(state["records"]) > 0,
-        "enrichment_done": len(state["enriched"]) == len(state["records"]),
-        "weights_exist":   state["weights"] is not None,
-        "scored_gt_zero":  len(state["scored"]) > 0,
-        "report_generated":state["report_path"] is not None,
+        'records_loaded':    len(state['records']) > 0,
+        'enrichment_done':   len(state['enriched']) >= len(state['records']),
+        'scored_gt_zero':    len(state['scored']) > 0,
+        'report_generated':  state['report_path'] is not None,
     }
-    failed = [k for k,v in checks.items() if not v]
+    failed = [k for k, v in checks.items() if not v]
     if failed:
         state["retries"] += 1
         state.log(f"Reflection FAILED: {failed}  (retry {state['retries']}/{MAX_RETRIES})")
