@@ -1,4 +1,4 @@
-"""PropIQ — FastAPI application with episodic memory + outcome tracking."""
+app_py = '''"""PropIQ — FastAPI application with episodic memory + outcome tracking."""
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -7,24 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import os
+import os, sqlite3, json
 from pathlib import Path
 from groq import Groq
 
 from propiq.storage import (
-    init_db,
-    fetch_scores,
-    fetch_top_agents,
-    log_pipeline_start,
-    log_pipeline_finish,
-    log_conversation,
-    fetch_pipeline_runs,
-    fetch_conversations,
-    record_outcome,
-    update_outcome,
-    withdraw_outcome,
-    fetch_outcomes,
-    fetch_outcome_stats,
+    init_db, DB_PATH,
+    fetch_scores, fetch_top_agents,
+    log_pipeline_start, log_pipeline_finish,
+    log_conversation, fetch_pipeline_runs, fetch_conversations,
+    record_outcome, update_outcome, withdraw_outcome,
+    fetch_outcomes, fetch_outcome_stats,
 )
 from propiq.reporter import json_report
 from propiq.agent import run_pipeline
@@ -72,12 +65,11 @@ class OutcomeWithdrawRequest(BaseModel):
 @app.on_event("startup")
 def startup():
     init_db()
-    import os
-    from huggingface_hub import hf_hub_download
-    token = os.environ.get("HF_TOKEN","")
+    # Try to load DB from HuggingFace if HF_TOKEN is set
+    token = os.environ.get("HF_TOKEN", "")
     if token:
         try:
-            from propiq.storage import DB_PATH
+            from huggingface_hub import hf_hub_download
             hf_hub_download(
                 repo_id="sunera01/propiq-db",
                 filename="propiq.db",
@@ -88,7 +80,49 @@ def startup():
             )
             print("[startup] DB loaded from HF dataset ✓")
         except Exception as e:
-            print(f"[startup] No dataset DB yet: {e}")
+            print(f"[startup] No HF dataset DB yet: {e}")
+
+    # Auto-seed from seed_data.json if DB is empty
+    try:
+        count = sqlite3.connect(DB_PATH).execute(
+            "SELECT COUNT(*) FROM scores").fetchone()[0]
+        if count == 0:
+            seed_path = Path(__file__).parent / "seed_data.json"
+            if seed_path.exists():
+                _do_seed(seed_path)
+                print("[startup] Auto-seeded from seed_data.json ✓")
+    except Exception as e:
+        print(f"[startup] Auto-seed skipped: {e}")
+
+# ── Seed helper ───────────────────────────────────────────────────────────────
+def _do_seed(seed_path: Path) -> int:
+    raw = json.loads(seed_path.read_text())
+    records = raw if isinstance(raw, list) else raw.get(
+        "properties", raw.get("listings", raw.get("top_properties", [])))
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS scores (
+        listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
+        sale_price REAL, land_size_sqm REAL, house_type TEXT,
+        year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
+        image_url TEXT, material TEXT, walk_score REAL,
+        school_rating REAL, nlp_features TEXT, inv_score REAL,
+        yield_proxy REAL, risk_score REAL, liquidity REAL,
+        quality REAL, rank_suburb INTEGER, scored_at TEXT
+    )""")
+    inserted = 0
+    for r in records:
+        try:
+            conn.execute("""INSERT OR REPLACE INTO scores VALUES (
+                :listing_id,:suburb,:address,:sale_price,:land_size_sqm,
+                :house_type,:year_built,:bedrooms,:bathrooms,:image_url,
+                :material,:walk_score,:school_rating,:nlp_features,
+                :inv_score,:yield_proxy,:risk_score,:liquidity,:quality,
+                :rank_suburb,:scored_at)""", r)
+            inserted += 1
+        except Exception:
+            pass
+    conn.commit(); conn.close()
+    return inserted
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")
@@ -104,6 +138,16 @@ if _static.exists():
 def health():
     return {"status": "ok", "version": "0.2.0"}
 
+# ── Seed endpoint (one-shot bootstrap) ───────────────────────────────────────
+@app.post("/api/seed")
+def seed():
+    """Bootstrap: insert seed_data.json into DB. Safe to call multiple times."""
+    seed_path = Path(__file__).parent / "seed_data.json"
+    if not seed_path.exists():
+        raise HTTPException(status_code=404, detail="seed_data.json not found on server")
+    inserted = _do_seed(seed_path)
+    return {"status": "ok", "seeded": inserted}
+
 # ── Market Context ────────────────────────────────────────────────────────────
 @app.get("/api/market-context")
 def market_context(
@@ -115,7 +159,7 @@ def market_context(
     report  = json_report(records, suburb=suburb, top_k=limit)
     if suburb and not records:
         raise HTTPException(status_code=404,
-            detail=f"No scored listings for '{suburb}'. Run POST /api/pipeline/run first.")
+            detail=f"No scored listings for \'{suburb}\'. Run POST /api/pipeline/run first.")
     return {**report, "agents": agents}
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
@@ -188,11 +232,9 @@ def chat_history(limit: int = Query(50, ge=1, le=200)):
 def create_outcome(body: OutcomeCreateRequest):
     """Track a property as a PropIQ recommendation to evaluate later."""
     outcome_id = record_outcome(
-        listing_id=body.listing_id,
-        conv_id=body.conv_id,
+        listing_id=body.listing_id, conv_id=body.conv_id,
         predicted_price=body.predicted_price,
-        predicted_score=body.predicted_score,
-        notes=body.notes,
+        predicted_score=body.predicted_score, notes=body.notes,
     )
     return {"outcome_id": outcome_id, "status": "pending"}
 
@@ -215,13 +257,20 @@ def list_outcomes(
     limit:  int        = Query(100, ge=1, le=500),
 ):
     """Return all tracked outcomes with variance % and hit flag."""
-    return {
-        "outcomes": fetch_outcomes(status=status, limit=limit),
-        "stats":    fetch_outcome_stats(),
-    }
+    return {"outcomes": fetch_outcomes(status=status, limit=limit),
+            "stats": fetch_outcome_stats()}
 
 @app.get("/api/outcomes/stats")
 def outcome_stats():
     """Aggregate performance: hit rate, avg variance, totals."""
     return fetch_outcome_stats()
-# rebuild
+'''
+
+with open("/tmp/app.py", "w") as f:
+    f.write(app_py)
+
+print("File written. Line count:", len(app_py.splitlines()))
+print("Contains /api/seed:", "/api/seed" in app_py)
+print("Contains _do_seed:", "_do_seed" in app_py)
+print("Contains auto-seed at startup:", "Auto-seeded" in app_py)
+print("Contains DB_PATH import:", "DB_PATH" in app_py)
