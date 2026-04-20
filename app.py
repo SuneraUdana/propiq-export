@@ -95,33 +95,92 @@ def startup():
 
 # ── Seed helper ───────────────────────────────────────────────────────────────
 def _do_seed(seed_path: Path) -> int:
+    import sqlite3, json
+    from propiq.storage import DB_PATH
+
     raw = json.loads(seed_path.read_text())
     records = raw if isinstance(raw, list) else raw.get(
-        "properties", raw.get("listings", raw.get("top_properties", [])))
+        "properties", raw.get("listings", raw.get("top_properties", []))
+    )
+
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("""CREATE TABLE IF NOT EXISTS scores (
-        listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
-        sale_price REAL, land_size_sqm REAL, house_type TEXT,
-        year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
-        image_url TEXT, material TEXT, walk_score REAL,
-        school_rating REAL, nlp_features TEXT, inv_score REAL,
-        yield_proxy REAL, risk_score REAL, liquidity REAL,
-        quality REAL, rank_suburb INTEGER, scored_at TEXT
-    )""")
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS listings (
+            listing_id    TEXT PRIMARY KEY,
+            suburb        TEXT,
+            address       TEXT,
+            sale_price    REAL,
+            land_size_sqm REAL,
+            house_type    TEXT,
+            year_built    INTEGER,
+            bedrooms      INTEGER,
+            bathrooms     INTEGER,
+            image_url     TEXT,
+            scraped_at    TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS enrichments (
+            listing_id    TEXT PRIMARY KEY,
+            material      TEXT,
+            walk_score    REAL,
+            school_rating REAL,
+            nlp_features  TEXT,
+            enriched_at   TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS scores (
+            listing_id  TEXT PRIMARY KEY,
+            inv_score   REAL,
+            yield_proxy REAL,
+            risk_score  REAL,
+            liquidity   REAL,
+            quality     REAL,
+            rank_suburb INTEGER,
+            scored_at   TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     inserted = 0
     for r in records:
         try:
-            conn.execute("""INSERT OR REPLACE INTO scores VALUES (
-                :listing_id,:suburb,:address,:sale_price,:land_size_sqm,
-                :house_type,:year_built,:bedrooms,:bathrooms,:image_url,
-                :material,:walk_score,:school_rating,:nlp_features,
-                :inv_score,:yield_proxy,:risk_score,:liquidity,:quality,
-                :rank_suburb,:scored_at)""", r)
+            cur.execute("""
+                INSERT OR REPLACE INTO listings
+                    (listing_id,suburb,address,sale_price,land_size_sqm,
+                     house_type,year_built,bedrooms,bathrooms,image_url)
+                VALUES
+                    (:listing_id,:suburb,:address,:sale_price,:land_size_sqm,
+                     :house_type,:year_built,:bedrooms,:bathrooms,:image_url)
+            """, r)
+
+            cur.execute("""
+                INSERT OR REPLACE INTO enrichments
+                    (listing_id,material,walk_score,school_rating,nlp_features)
+                VALUES
+                    (:listing_id,:material,:walk_score,:school_rating,:nlp_features)
+            """, r)
+
+            cur.execute("""
+                INSERT OR REPLACE INTO scores
+                    (listing_id,inv_score,yield_proxy,risk_score,liquidity,quality,rank_suburb,scored_at)
+                VALUES
+                    (:listing_id,:inv_score,:yield_proxy,:risk_score,:liquidity,:quality,:rank_suburb,:scored_at)
+            """, r)
+
             inserted += 1
         except Exception:
             pass
-    conn.commit(); conn.close()
+
+    conn.commit()
+    conn.close()
     return inserted
+
+
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")
