@@ -1,4 +1,4 @@
-app_py = '''"""PropIQ — FastAPI application with episodic memory + outcome tracking."""
+"""PropIQ — FastAPI application with episodic memory + outcome tracking."""
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -65,7 +65,6 @@ class OutcomeWithdrawRequest(BaseModel):
 @app.on_event("startup")
 def startup():
     init_db()
-    # Try to load DB from HuggingFace if HF_TOKEN is set
     token = os.environ.get("HF_TOKEN", "")
     if token:
         try:
@@ -159,7 +158,7 @@ def market_context(
     report  = json_report(records, suburb=suburb, top_k=limit)
     if suburb and not records:
         raise HTTPException(status_code=404,
-            detail=f"No scored listings for \'{suburb}\'. Run POST /api/pipeline/run first.")
+            detail=f"No scored listings for '{suburb}'. Run POST /api/pipeline/run first.")
     return {**report, "agents": agents}
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
@@ -230,7 +229,6 @@ def chat_history(limit: int = Query(50, ge=1, le=200)):
 # ── Outcome Tracking ──────────────────────────────────────────────────────────
 @app.post("/api/outcomes", status_code=201)
 def create_outcome(body: OutcomeCreateRequest):
-    """Track a property as a PropIQ recommendation to evaluate later."""
     outcome_id = record_outcome(
         listing_id=body.listing_id, conv_id=body.conv_id,
         predicted_price=body.predicted_price,
@@ -240,14 +238,11 @@ def create_outcome(body: OutcomeCreateRequest):
 
 @app.put("/api/outcomes/{outcome_id}")
 def resolve_outcome(outcome_id: str, body: OutcomeUpdateRequest):
-    """Record the actual sale price once the property has sold."""
     update_outcome(outcome_id, body.actual_sale, body.actual_date, body.notes)
-    return {"outcome_id": outcome_id, "status": "sold",
-            "actual_sale": body.actual_sale}
+    return {"outcome_id": outcome_id, "status": "sold", "actual_sale": body.actual_sale}
 
 @app.post("/api/outcomes/{outcome_id}/withdraw")
 def withdraw(outcome_id: str, body: OutcomeWithdrawRequest):
-    """Mark a tracked property as withdrawn (listing removed / not sold)."""
     withdraw_outcome(outcome_id, body.notes)
     return {"outcome_id": outcome_id, "status": "withdrawn"}
 
@@ -256,21 +251,9 @@ def list_outcomes(
     status: str | None = Query(None, description="pending | sold | withdrawn"),
     limit:  int        = Query(100, ge=1, le=500),
 ):
-    """Return all tracked outcomes with variance % and hit flag."""
     return {"outcomes": fetch_outcomes(status=status, limit=limit),
             "stats": fetch_outcome_stats()}
 
 @app.get("/api/outcomes/stats")
 def outcome_stats():
-    """Aggregate performance: hit rate, avg variance, totals."""
     return fetch_outcome_stats()
-'''
-
-with open("/tmp/app.py", "w") as f:
-    f.write(app_py)
-
-print("File written. Line count:", len(app_py.splitlines()))
-print("Contains /api/seed:", "/api/seed" in app_py)
-print("Contains _do_seed:", "_do_seed" in app_py)
-print("Contains auto-seed at startup:", "Auto-seeded" in app_py)
-print("Contains DB_PATH import:", "DB_PATH" in app_py)
