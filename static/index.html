@@ -631,177 +631,56 @@ async function loadData() {
   try {
     const r = await fetch(`${API}/api/market-context?limit=100`);
     const d = await r.json();
-    allData = d.top_properties || [];
-    suburbSummary = d.suburb_rankings || [];
+    
+    // Support snake_case and camelCase fallback
+    allData = d.top_properties || d.topproperties || d.topProperties || [];
+    suburbSummary = d.suburb_rankings || d.suburbrankings || d.suburbRankings || [];
+    
     updateKPIs(d);
     renderSuburbs(suburbSummary);
     updateChart(suburbSummary);
     renderTable(allData);
-  } catch(e) { console.error('Load error:', e); }
-  // Also update conv count badge
+  } catch(e) {
+    console.error('Load error', e);
+  }
+  
+  // Update conv count badge
   try {
     const r2 = await fetch(`${API}/api/chat/history?limit=200`);
     const d2 = await r2.json();
-    const cnt = (d2.conversations||[]).length;
-    document.getElementById('conv-count').textContent = cnt || '0';
-    document.getElementById('kpi-convs').textContent = cnt;
-  } catch {}
+    const cnt = d2.conversations ? d2.conversations.length : 0;
+    const el1 = document.getElementById('conv-count');
+    const el2 = document.getElementById('kpi-convs');
+    if(el1) el1.textContent = cnt;
+    if(el2) el2.textContent = cnt;
+  } catch(e) {
+    console.error(e);
+  }
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
 function updateKPIs(d) {
-  document.getElementById('kpi-total').textContent =
-    (allData.length || '—').toLocaleString();
-  document.getElementById('kpi-suburbs').textContent = suburbSummary.length || '—';
-  const scores = allData.map(p => p.inv_score||0).filter(Boolean);
+  const elTotal = document.getElementById('kpi-total');
+  const elSuburbs = document.getElementById('kpi-suburbs');
+  const elAvg = document.getElementById('kpi-avg');
+  const elTop = document.getElementById('kpi-top');
+  const elPrice = document.getElementById('kpi-price');
+  
+  if(elTotal) elTotal.textContent = (allData.length || '—').toLocaleString();
+  if(elSuburbs) elSuburbs.textContent = suburbSummary.length || '—';
+  
+  const scores = suburbSummary.map(s => s.avg_score || s.avgscore || s.avg_inv_score || 0).filter(Boolean);
   const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2) : '—';
-  document.getElementById('kpi-avg').textContent = avg;
-  document.getElementById('kpi-top').textContent =
-    scores.length ? Math.max(...scores).toFixed(2) : '—';
-  const prices = allData.map(p=>p.sale_price||0).filter(Boolean).sort((a,b)=>a-b);
-  const med = prices.length ? prices[Math.floor(prices.length/2)] : 0;
-  document.getElementById('kpi-price').textContent = med ? '$'+Math.round(med/1000)+'K' : '—';
-}
-
-// ── SUBURB CARDS ─────────────────────────────────────────────
-// SUBURB CARDS
-// SUBURB CARDS
-function renderSuburbs(subs) {
-  const el = document.getElementById('suburb-grid');
-  if (!subs || !subs.length) {
-    el.innerHTML = `
-      <div class="empty">
-        <i data-lucide="map-pin" width="40" height="40" style="color:var(--color-text-faint);margin-bottom:var(--space-4)"></i>
-        <h3>No suburb data</h3>
-        <p>Run the pipeline to score properties.</p>
-        <button class="btn btn-primary" onclick="navTo('pipeline')">Run Pipeline</button>
-      </div>`;
-    lucide.createIcons();
-    return;
-  }
+  if(elAvg) elAvg.textContent = avg;
   
-  // Look for both avgscore AND avg_inv_score so it never breaks
-  const maxScore = Math.max(...subs.map(s => s.avgscore || s.avg_inv_score || 0));
-  
-  el.innerHTML = subs.map((s, i) => {
-    const score = s.avgscore || s.avg_inv_score || 0;
-    const pct = maxScore > 0 ? (score / maxScore * 100).toFixed(0) : 0;
-    const cls = i === 0 ? 'badge-green' : (i < 3 ? 'badge-yellow' : 'badge-muted');
-    const lbl = i === 0 ? 'Top Pick' : (i < 3 ? 'Strong' : 'Watch');
-    const count = s.count || s.listing_count || 0;
-    const median = s.medianprice || s.median_price || 0;
+  const topScores = allData.map(p => p.inv_score || p.invscore || 0).filter(Boolean);
+  if(elTop) elTop.textContent = topScores.length ? Math.max(...topScores).toFixed(2) : '—';
     
-    return `
-      <div class="suburb-card" onclick="filterBySuburb('${s.suburb}')">
-        <div class="suburb-rank">#${i + 1} <span class="badge ${cls}" style="margin-left:6px">${lbl}</span></div>
-        <div class="suburb-name">${s.suburb}</div>
-        <div class="suburb-stats">
-          <div><div class="suburb-stat-label">Avg Score</div> <div class="suburb-stat-value">${score.toFixed(2)}</div></div>
-          <div><div class="suburb-stat-label">Listings</div> <div class="suburb-stat-value">${count}</div></div>
-          <div><div class="suburb-stat-label">Median</div> <div class="suburb-stat-value">$${Math.round(median / 1000)}K</div></div>
-          <div><div class="suburb-stat-label">Match</div> <div class="suburb-stat-value">${pct}%</div></div>
-        </div>
-        <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
-      </div>`;
-  }).join('');
-  lucide.createIcons();
+  const prices = allData.map(p => p.sale_price || p.saleprice || 0).filter(Boolean).sort((a,b)=>a-b);
+  const med = prices.length ? prices[Math.floor(prices.length/2)] : 0;
+  if(elPrice) elPrice.textContent = med ? '$' + Math.round(med/1000) + 'K' : '—';
 }
 
-function navTo(page) { document.querySelector(`.nav-item[data-page="${page}"]`).click(); }
-function filterBySuburb(s) { navTo('properties'); document.getElementById('prop-search').value=s; applyFilter(); }
-
-// ── CHART ─────────────────────────────────────────────────────
-function updateChart(subs) {
-  const ctx = document.getElementById('suburb-chart').getContext('2d');
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#797876' : '#7a7974';
-  const gridColor = isDark ? '#262523' : '#dcd9d5';
-  const accent = isDark ? '#4f98a3' : '#01696f';
-
-  if (chartInstance) chartInstance.destroy();
-
-  const sortedSubs = [...subs].sort(
-    (a, b) => (b.avgscore || b.avg_inv_score || 0) - (a.avgscore || a.avg_inv_score || 0)
-  );
-
-  chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: sortedSubs.map(s => s.suburb),
-      datasets: [{
-        label: 'Avg Score',
-        data: sortedSubs.map(s => Number(s.avgscore || s.avg_inv_score || 0).toFixed(3)),
-        backgroundColor: sortedSubs.map((_, i) => i === 0 ? accent : (isDark ? '#313b3b' : '#cedcd8')),
-        borderRadius: 6,
-        borderSkipped: false
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 600 },
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: v => 'Score: ' + v.parsed.y.toFixed(3) } }
-      },
-      scales: {
-        x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 } } },
-        y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 } }, beginAtZero: true }
-      }
-    }
-  });
-}
-
-  const ctx = document.getElementById('suburb-chart').getContext('2d');
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#797876' : '#7a7974';
-  const gridColor = isDark ? '#262523' : '#dcd9d5';
-  const accent = isDark ? '#4f98a3' : '#01696f';
-
-  if (chartInstance) chartInstance.destroy();
-  
-  // Create a sorted copy of subs so the chart is ordered from best to worst
-  const sortedSubs = [...subs].sort((a, b) => (b.avg_inv_score || 0) - (a.avg_inv_score || 0));
-
-  chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: sortedSubs.map(s => s.suburb),
-      datasets: [{
-        label: 'Avg Score',
-        // CHANGED s.avgscore to s.avg_inv_score
-        data: sortedSubs.map(s => (s.avg_inv_score || 0).toFixed(3)),
-        backgroundColor: sortedSubs.map((_, i) => i === 0 ? accent : (isDark ? '#313b3b' : '#cedcd8')),
-        borderRadius: 6,
-        borderSkipped: false
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 600 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: v => 'Score: ' + v.parsed.y.toFixed(3)
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: gridColor },
-          ticks: { color: textColor, font: { size: 12 } }
-        },
-        y: {
-          grid: { color: gridColor },
-          ticks: { color: textColor, font: { size: 12 } },
-          beginAtZero: true
-        }
-      }
-    }
-  });
-}
 // ── TABLE ─────────────────────────────────────────────────────
 function renderTable(data) {
   const sorted = [...data].sort((a,b)=>sortDir*((a[sortCol]||0)>(b[sortCol]||0)?1:-1));
