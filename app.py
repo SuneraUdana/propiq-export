@@ -192,6 +192,26 @@ if _static.exists():
         return FileResponse("static/index.html")
 
 # ── Health ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/debug")
+def debug_db():
+    import sqlite3
+    from propiq.storage import DB_PATH
+    result = {"db_path": str(DB_PATH), "db_exists": DB_PATH.exists()}
+    if DB_PATH.exists():
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        for table in ["listings", "enrichments", "scores"]:
+            try:
+                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                result[table] = count
+            except Exception as e:
+                result[table] = f"ERROR: {e}"
+        cur.execute("SELECT listing_id, inv_score FROM scores LIMIT 2")
+        result["sample_scores"] = cur.fetchall()
+        conn.close()
+    return result
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.2.0"}
