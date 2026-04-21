@@ -665,6 +665,7 @@ function updateKPIs(d) {
 
 // ── SUBURB CARDS ─────────────────────────────────────────────
 // SUBURB CARDS
+// SUBURB CARDS
 function renderSuburbs(subs) {
   const el = document.getElementById('suburb-grid');
   if (!subs || !subs.length) {
@@ -679,24 +680,25 @@ function renderSuburbs(subs) {
     return;
   }
   
-  // CHANGED to use avg_inv_score
-  const maxScore = Math.max(...subs.map(s => s.avg_inv_score || 0));
+  // Look for both avgscore AND avg_inv_score so it never breaks
+  const maxScore = Math.max(...subs.map(s => s.avgscore || s.avg_inv_score || 0));
   
   el.innerHTML = subs.map((s, i) => {
-    // CHANGED to use avg_inv_score
-    const pct = maxScore > 0 ? ((s.avg_inv_score || 0) / maxScore * 100).toFixed(0) : 0;
+    const score = s.avgscore || s.avg_inv_score || 0;
+    const pct = maxScore > 0 ? (score / maxScore * 100).toFixed(0) : 0;
     const cls = i === 0 ? 'badge-green' : (i < 3 ? 'badge-yellow' : 'badge-muted');
     const lbl = i === 0 ? 'Top Pick' : (i < 3 ? 'Strong' : 'Watch');
+    const count = s.count || s.listing_count || 0;
+    const median = s.medianprice || s.median_price || 0;
     
-    // CHANGED listing_count and median_price
     return `
       <div class="suburb-card" onclick="filterBySuburb('${s.suburb}')">
         <div class="suburb-rank">#${i + 1} <span class="badge ${cls}" style="margin-left:6px">${lbl}</span></div>
         <div class="suburb-name">${s.suburb}</div>
         <div class="suburb-stats">
-          <div><div class="suburb-stat-label">Avg Score</div> <div class="suburb-stat-value">${(s.avg_inv_score || 0).toFixed(2)}</div></div>
-          <div><div class="suburb-stat-label">Listings</div> <div class="suburb-stat-value">${s.listing_count || 0}</div></div>
-          <div><div class="suburb-stat-label">Median</div> <div class="suburb-stat-value">$${Math.round((s.median_price || 0) / 1000)}K</div></div>
+          <div><div class="suburb-stat-label">Avg Score</div> <div class="suburb-stat-value">${score.toFixed(2)}</div></div>
+          <div><div class="suburb-stat-label">Listings</div> <div class="suburb-stat-value">${count}</div></div>
+          <div><div class="suburb-stat-label">Median</div> <div class="suburb-stat-value">$${Math.round(median / 1000)}K</div></div>
           <div><div class="suburb-stat-label">Match</div> <div class="suburb-stat-value">${pct}%</div></div>
         </div>
         <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
@@ -704,12 +706,51 @@ function renderSuburbs(subs) {
   }).join('');
   lucide.createIcons();
 }
+
 function navTo(page) { document.querySelector(`.nav-item[data-page="${page}"]`).click(); }
 function filterBySuburb(s) { navTo('properties'); document.getElementById('prop-search').value=s; applyFilter(); }
 
 // ── CHART ─────────────────────────────────────────────────────
-// CHART
 function updateChart(subs) {
+  const ctx = document.getElementById('suburb-chart').getContext('2d');
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  const textColor = isDark ? '#797876' : '#7a7974';
+  const gridColor = isDark ? '#262523' : '#dcd9d5';
+  const accent = isDark ? '#4f98a3' : '#01696f';
+
+  if (chartInstance) chartInstance.destroy();
+  
+  // Sort suburbs from highest score to lowest
+  const sortedSubs = [...subs].sort((a, b) => (b.avgscore || b.avg_inv_score || 0) - (a.avgscore || a.avg_inv_score || 0));
+
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sortedSubs.map(s => s.suburb),
+      datasets: [{
+        label: 'Avg Score',
+        data: sortedSubs.map(s => (s.avgscore || s.avg_inv_score || 0).toFixed(3)),
+        backgroundColor: sortedSubs.map((_, i) => i === 0 ? accent : (isDark ? '#313b3b' : '#cedcd8')),
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: v => 'Score: ' + v.parsed.y.toFixed(3) } }
+      },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 } } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 } }, beginAtZero: true }
+      }
+    }
+  });
+}
+
   const ctx = document.getElementById('suburb-chart').getContext('2d');
   const isDark = html.getAttribute('data-theme') === 'dark';
   const textColor = isDark ? '#797876' : '#7a7974';
