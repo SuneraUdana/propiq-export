@@ -5,7 +5,7 @@ import sqlite3, json, uuid
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(os.environ.get("DB_PATH", "data/propiq.db"))
+DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent.parent / "data" / "propiq.db")))
 
 
 def _connect() -> sqlite3.Connection:
