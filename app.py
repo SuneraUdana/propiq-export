@@ -24,8 +24,42 @@ from propiq.agent import run_pipeline
 from propiq.context import build_system_prompt
 
 # ── App ───────────────────────────────────────────────────────────────────────
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # everything that was inside startup() goes here
+    init_db()
+    token = os.environ.get("HF_TOKEN", "")
+    if token:
+        try:
+            from huggingface_hub import hf_hub_download
+            hf_hub_download(
+                repo_id="sunera01/propiq-db",
+                filename="propiq.db",
+                repo_type="dataset",
+                token=token,
+                local_dir=str(DB_PATH.parent),
+                local_dir_use_symlinks=False
+            )
+            print("[startup] DB loaded from HF dataset ✓")
+        except Exception as e:
+            print(f"[startup] No HF dataset DB yet: {e}")
+    try:
+        count = sqlite3.connect(DB_PATH).execute(
+            "SELECT COUNT(*) FROM scores").fetchone()[0]
+        if count == 0:
+            seed_path = Path(__file__).parent / "seed_data.json"
+            if seed_path.exists():
+                _do_seed(seed_path)
+                print("[startup] Auto-seeded from seed_data.json ✓")
+    except Exception as e:
+        print(f"[startup] Auto-seed skipped: {e}")
+    yield  # app runs here
+
 app = FastAPI(title="PropIQ API", version="0.2.0",
-              description="Property investment scoring engine with outcome tracking")
+              description="Property investment scoring engine with outcome tracking",
+              lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
@@ -95,92 +129,33 @@ def startup():
 
 # ── Seed helper ───────────────────────────────────────────────────────────────
 def _do_seed(seed_path: Path) -> int:
-    import sqlite3, json
-    from propiq.storage import DB_PATH
-
     raw = json.loads(seed_path.read_text())
     records = raw if isinstance(raw, list) else raw.get(
-        "properties", raw.get("listings", raw.get("top_properties", []))
-    )
-
+        "properties", raw.get("listings", raw.get("top_properties", [])))
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS listings (
-            listing_id    TEXT PRIMARY KEY,
-            suburb        TEXT,
-            address       TEXT,
-            sale_price    REAL,
-            land_size_sqm REAL,
-            house_type    TEXT,
-            year_built    INTEGER,
-            bedrooms      INTEGER,
-            bathrooms     INTEGER,
-            image_url     TEXT,
-            scraped_at    TEXT DEFAULT (datetime('now'))
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS enrichments (
-            listing_id    TEXT PRIMARY KEY,
-            material      TEXT,
-            walk_score    REAL,
-            school_rating REAL,
-            nlp_features  TEXT,
-            enriched_at   TEXT DEFAULT (datetime('now'))
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS scores (
-            listing_id  TEXT PRIMARY KEY,
-            inv_score   REAL,
-            yield_proxy REAL,
-            risk_score  REAL,
-            liquidity   REAL,
-            quality     REAL,
-            rank_suburb INTEGER,
-            scored_at   TEXT DEFAULT (datetime('now'))
-        )
-    """)
-
+    conn.execute("""CREATE TABLE IF NOT EXISTS scores (
+        listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
+        sale_price REAL, land_size_sqm REAL, house_type TEXT,
+        year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
+        image_url TEXT, material TEXT, walk_score REAL,
+        school_rating REAL, nlp_features TEXT, inv_score REAL,
+        yield_proxy REAL, risk_score REAL, liquidity REAL,
+        quality REAL, rank_suburb INTEGER, scored_at TEXT
+    )""")
     inserted = 0
     for r in records:
         try:
-            cur.execute("""
-                INSERT OR REPLACE INTO listings
-                    (listing_id,suburb,address,sale_price,land_size_sqm,
-                     house_type,year_built,bedrooms,bathrooms,image_url)
-                VALUES
-                    (:listing_id,:suburb,:address,:sale_price,:land_size_sqm,
-                     :house_type,:year_built,:bedrooms,:bathrooms,:image_url)
-            """, r)
-
-            cur.execute("""
-                INSERT OR REPLACE INTO enrichments
-                    (listing_id,material,walk_score,school_rating,nlp_features)
-                VALUES
-                    (:listing_id,:material,:walk_score,:school_rating,:nlp_features)
-            """, r)
-
-            cur.execute("""
-                INSERT OR REPLACE INTO scores
-                    (listing_id,inv_score,yield_proxy,risk_score,liquidity,quality,rank_suburb,scored_at)
-                VALUES
-                    (:listing_id,:inv_score,:yield_proxy,:risk_score,:liquidity,:quality,:rank_suburb,:scored_at)
-            """, r)
-
+            conn.execute("""INSERT OR REPLACE INTO scores VALUES (
+                :listing_id,:suburb,:address,:sale_price,:land_size_sqm,
+                :house_type,:year_built,:bedrooms,:bathrooms,:image_url,
+                :material,:walk_score,:school_rating,:nlp_features,
+                :inv_score,:yield_proxy,:risk_score,:liquidity,:quality,
+                :rank_suburb,:scored_at)""", r)
             inserted += 1
-        except Exception as e:
+        except Exception:
             pass
-
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return inserted
-
-
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")
@@ -192,99 +167,21 @@ if _static.exists():
         return FileResponse("static/index.html")
 
 # ── Health ────────────────────────────────────────────────────────────────────
-
-@app.get("/api/debug")
-def debug_db():
-    import sqlite3
-    from propiq.storage import DB_PATH
-    result = {"db_path": str(DB_PATH), "db_exists": DB_PATH.exists()}
-    if DB_PATH.exists():
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        for table in ["listings", "enrichments", "scores"]:
-            try:
-                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                result[table] = count
-            except Exception as e:
-                result[table] = f"ERROR: {e}"
-        cur.execute("SELECT listing_id, inv_score FROM scores LIMIT 2")
-        result["sample_scores"] = cur.fetchall()
-        conn.close()
-    return result
-
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.2.0"}
 
 # ── Seed endpoint (one-shot bootstrap) ───────────────────────────────────────
 @app.post("/api/seed")
-def seed(reset: bool = False):
-    import sqlite3, json as _json
-    from pathlib import Path as _Path
-
-    seed_path = _Path(__file__).parent / "seed_data.json"
+def seed():
+    """Bootstrap: insert seed_data.json into DB. Safe to call multiple times."""
+    seed_path = Path(__file__).parent / "seed_data.json"
     if not seed_path.exists():
-        raise HTTPException(status_code=404, detail="seed_data.json not found")
+        raise HTTPException(status_code=404, detail="seed_data.json not found on server")
+    inserted = _do_seed(seed_path)
+    return {"status": "ok", "seeded": inserted}
 
-    raw = _json.loads(seed_path.read_text())
-    records = raw if isinstance(raw, list) else raw.get(
-        "properties", raw.get("listings", raw.get("top_properties", [])))
-
-    db = _Path(__file__).parent / "data" / "propiq.db"
-    db.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db)
-    cur = conn.cursor()
-
-    if reset:
-        cur.executescript("DROP TABLE IF EXISTS listings; DROP TABLE IF EXISTS enrichments; DROP TABLE IF EXISTS scores;")
-
-    cur.executescript("""
-        CREATE TABLE IF NOT EXISTS listings (
-            listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
-            sale_price REAL, land_size_sqm REAL, house_type TEXT,
-            year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
-            image_url TEXT, scraped_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS enrichments (
-            listing_id TEXT PRIMARY KEY, material TEXT,
-            walk_score REAL, school_rating REAL, nlp_features TEXT,
-            enriched_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS scores (
-            listing_id TEXT PRIMARY KEY, inv_score REAL,
-            yield_proxy REAL, risk_score REAL, liquidity REAL,
-            quality REAL, rank_suburb INTEGER,
-            scored_at TEXT DEFAULT (datetime('now'))
-        );
-    """)
-
-    inserted = 0
-    for r in records:
-        try:
-            cur.execute("""INSERT OR REPLACE INTO listings
-                (listing_id,suburb,address,sale_price,land_size_sqm,house_type,year_built,bedrooms,bathrooms,image_url)
-                VALUES (:listing_id,:suburb,:address,:sale_price,:land_size_sqm,:house_type,:year_built,:bedrooms,:bathrooms,:image_url)""", r)
-            cur.execute("""INSERT OR REPLACE INTO enrichments
-                (listing_id,material,walk_score,school_rating,nlp_features)
-                VALUES (:listing_id,:material,:walk_score,:school_rating,:nlp_features)""", r)
-            cur.execute("""INSERT OR REPLACE INTO scores
-                (listing_id,inv_score,yield_proxy,risk_score,liquidity,quality,rank_suburb,scored_at)
-                VALUES (:listing_id,:inv_score,:yield_proxy,:risk_score,:liquidity,:quality,:rank_suburb,:scored_at)""", r)
-            inserted += 1
-        except Exception:
-            pass
-
-    conn.commit()
-    conn.close()
-
-    # verify
-    conn2 = sqlite3.connect(db)
-    count = conn2.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
-    conn2.close()
-
-    return {"status": "ok", "seeded": inserted, "db": str(db), "scores_in_db": count}
-
-
+# ── Market Context ────────────────────────────────────────────────────────────
 @app.get("/api/market-context")
 def market_context(
     suburb: str | None = Query(None),
