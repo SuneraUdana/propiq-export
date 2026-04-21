@@ -173,7 +173,7 @@ def _do_seed(seed_path: Path) -> int:
             """, r)
 
             inserted += 1
-        except Exception:
+        except Exception as e:
             pass
 
     conn.commit()
