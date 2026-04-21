@@ -719,9 +719,10 @@ function updateChart(subs) {
   const accent = isDark ? '#4f98a3' : '#01696f';
 
   if (chartInstance) chartInstance.destroy();
-  
-  // Sort suburbs from highest score to lowest
-  const sortedSubs = [...subs].sort((a, b) => (b.avgscore || b.avg_inv_score || 0) - (a.avgscore || a.avg_inv_score || 0));
+
+  const sortedSubs = [...subs].sort(
+    (a, b) => (b.avgscore || b.avg_inv_score || 0) - (a.avgscore || a.avg_inv_score || 0)
+  );
 
   chartInstance = new Chart(ctx, {
     type: 'bar',
@@ -729,7 +730,7 @@ function updateChart(subs) {
       labels: sortedSubs.map(s => s.suburb),
       datasets: [{
         label: 'Avg Score',
-        data: sortedSubs.map(s => (s.avgscore || s.avg_inv_score || 0).toFixed(3)),
+        data: sortedSubs.map(s => Number(s.avgscore || s.avg_inv_score || 0).toFixed(3)),
         backgroundColor: sortedSubs.map((_, i) => i === 0 ? accent : (isDark ? '#313b3b' : '#cedcd8')),
         borderRadius: 6,
         borderSkipped: false
