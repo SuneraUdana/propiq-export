@@ -219,14 +219,69 @@ def health():
 # ── Seed endpoint (one-shot bootstrap) ───────────────────────────────────────
 @app.post("/api/seed")
 def seed():
-    """Bootstrap: insert seed_data.json into DB. Safe to call multiple times."""
-    seed_path = Path(__file__).parent / "seed_data.json"
-    if not seed_path.exists():
-        raise HTTPException(status_code=404, detail="seed_data.json not found on server")
-    inserted = _do_seed(seed_path)
-    return {"status": "ok", "seeded": inserted}
+    import sqlite3, json as _json
+    from pathlib import Path as _Path
 
-# ── Market Context ────────────────────────────────────────────────────────────
+    seed_path = _Path(__file__).parent / "seed_data.json"
+    if not seed_path.exists():
+        raise HTTPException(status_code=404, detail="seed_data.json not found")
+
+    raw = _json.loads(seed_path.read_text())
+    records = raw if isinstance(raw, list) else raw.get(
+        "properties", raw.get("listings", raw.get("top_properties", [])))
+
+    db = _Path(__file__).parent / "data" / "propiq.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db)
+    cur = conn.cursor()
+
+    cur.executescript("""
+        CREATE TABLE IF NOT EXISTS listings (
+            listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
+            sale_price REAL, land_size_sqm REAL, house_type TEXT,
+            year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
+            image_url TEXT, scraped_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS enrichments (
+            listing_id TEXT PRIMARY KEY, material TEXT,
+            walk_score REAL, school_rating REAL, nlp_features TEXT,
+            enriched_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS scores (
+            listing_id TEXT PRIMARY KEY, inv_score REAL,
+            yield_proxy REAL, risk_score REAL, liquidity REAL,
+            quality REAL, rank_suburb INTEGER,
+            scored_at TEXT DEFAULT (datetime('now'))
+        );
+    """)
+
+    inserted = 0
+    for r in records:
+        try:
+            cur.execute("""INSERT OR REPLACE INTO listings
+                (listing_id,suburb,address,sale_price,land_size_sqm,house_type,year_built,bedrooms,bathrooms,image_url)
+                VALUES (:listing_id,:suburb,:address,:sale_price,:land_size_sqm,:house_type,:year_built,:bedrooms,:bathrooms,:image_url)""", r)
+            cur.execute("""INSERT OR REPLACE INTO enrichments
+                (listing_id,material,walk_score,school_rating,nlp_features)
+                VALUES (:listing_id,:material,:walk_score,:school_rating,:nlp_features)""", r)
+            cur.execute("""INSERT OR REPLACE INTO scores
+                (listing_id,inv_score,yield_proxy,risk_score,liquidity,quality,rank_suburb,scored_at)
+                VALUES (:listing_id,:inv_score,:yield_proxy,:risk_score,:liquidity,:quality,:rank_suburb,:scored_at)""", r)
+            inserted += 1
+        except Exception:
+            pass
+
+    conn.commit()
+    conn.close()
+
+    # verify
+    conn2 = sqlite3.connect(db)
+    count = conn2.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+    conn2.close()
+
+    return {"status": "ok", "seeded": inserted, "db": str(db), "scores_in_db": count}
+
+
 @app.get("/api/market-context")
 def market_context(
     suburb: str | None = Query(None),
