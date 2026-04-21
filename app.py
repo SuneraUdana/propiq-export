@@ -218,7 +218,7 @@ def health():
 
 # ── Seed endpoint (one-shot bootstrap) ───────────────────────────────────────
 @app.post("/api/seed")
-def seed():
+def seed(reset: bool = False):
     import sqlite3, json as _json
     from pathlib import Path as _Path
 
@@ -234,6 +234,9 @@ def seed():
     db.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db)
     cur = conn.cursor()
+
+    if reset:
+        cur.executescript("DROP TABLE IF EXISTS listings; DROP TABLE IF EXISTS enrichments; DROP TABLE IF EXISTS scores;")
 
     cur.executescript("""
         CREATE TABLE IF NOT EXISTS listings (
