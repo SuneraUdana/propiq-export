@@ -131,31 +131,44 @@ def startup():
 def _do_seed(seed_path: Path) -> int:
     raw = json.loads(seed_path.read_text())
     records = raw if isinstance(raw, list) else raw.get(
-        "properties", raw.get("listings", raw.get("top_properties", [])))
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""CREATE TABLE IF NOT EXISTS scores (
-        listing_id TEXT PRIMARY KEY, suburb TEXT, address TEXT,
-        sale_price REAL, land_size_sqm REAL, house_type TEXT,
-        year_built INTEGER, bedrooms INTEGER, bathrooms INTEGER,
-        image_url TEXT, material TEXT, walk_score REAL,
-        school_rating REAL, nlp_features TEXT, inv_score REAL,
-        yield_proxy REAL, risk_score REAL, liquidity REAL,
-        quality REAL, rank_suburb INTEGER, scored_at TEXT
-    )""")
-    inserted = 0
+        'properties', raw.get('listings', raw.get('top_properties', [])))
+    from propiq.storage import upsert_listings, upsert_enrichments, upsert_scores
+    listings, enrichments, scores = [], [], []
     for r in records:
-        try:
-            conn.execute("""INSERT OR REPLACE INTO scores VALUES (
-                :listing_id,:suburb,:address,:sale_price,:land_size_sqm,
-                :house_type,:year_built,:bedrooms,:bathrooms,:image_url,
-                :material,:walk_score,:school_rating,:nlp_features,
-                :inv_score,:yield_proxy,:risk_score,:liquidity,:quality,
-                :rank_suburb,:scored_at)""", r)
-            inserted += 1
-        except Exception:
-            pass
-    conn.commit(); conn.close()
-    return inserted
+        listings.append({
+            'listing_id':    r.get('listing_id'),
+            'suburb':        r.get('suburb'),
+            'address':       r.get('address'),
+            'sale_price':    r.get('sale_price'),
+            'land_size_sqm': r.get('land_size_sqm'),
+            'house_type':    r.get('house_type'),
+            'year_built':    r.get('year_built'),
+            'bedrooms':      r.get('bedrooms'),
+            'bathrooms':     r.get('bathrooms'),
+            'image_url':     r.get('image_url'),
+        })
+        enrichments.append({
+            'listing_id':    r.get('listing_id'),
+            'material':      r.get('material'),
+            'walk_score':    r.get('walk_score'),
+            'school_rating': r.get('school_rating'),
+            'nlp_features':  r.get('nlp_features') if isinstance(r.get('nlp_features'), str)
+                             else json.dumps(r.get('nlp_features') or {}),
+        })
+        scores.append({
+            'listing_id':  r.get('listing_id'),
+            'inv_score':   r.get('inv_score'),
+            'yield_proxy': r.get('yield_proxy'),
+            'risk_score':  r.get('risk_score'),
+            'liquidity':   r.get('liquidity'),
+            'quality':     r.get('quality'),
+            'rank_suburb': r.get('rank_suburb'),
+        })
+    upsert_listings(listings)
+    upsert_enrichments(enrichments)
+    upsert_scores(scores)
+    print(f'[seed] {len(scores)} records seeded into 3 tables')
+    return len(scores)
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")

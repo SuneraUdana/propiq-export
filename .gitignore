@@ -3,9 +3,10 @@
 __pycache__/
 *.pyc
 *.pyo
-data/
 propiq.db
 .DS_Store
 design-test.html.streamlit/
 data/*.db
 data/*.db
+data/
+!seed_data.json
