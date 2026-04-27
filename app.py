@@ -189,7 +189,7 @@ def market_context(
 ):
     records = fetch_scores(suburb=suburb, limit=limit)
     agents  = fetch_top_agents(suburb=suburb, limit=5)
-    report  = json_report(records, suburb=suburb, top_k=limit)
+    report  = json_report(records, suburb=suburb, topk=limit)
     if suburb and not records:
         raise HTTPException(status_code=404,
             detail=f"No scored listings for '{suburb}'. Run POST /api/pipeline/run first.")
