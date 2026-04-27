@@ -10,3 +10,5 @@ data/*.db
 data/*.db
 data/
 !seed_data.json
+data/*.db
+data/
