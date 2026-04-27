@@ -110,5 +110,15 @@ def run_pipeline(target_suburbs):
     status = "✓ SUCCESS" if state["ok"] else "✗ FAILED after max retries"
     if state["failed_tasks"]:
         print(f"  [agent] Skipped tasks: {[t['task'] for t in state['failed_tasks']]}")
+
+    # NEW: Take a snapshot of the updated suburb scores for historical charts
+    try:
+        from propiq.storage import snapshot_suburb_history
+        count = snapshot_suburb_history()
+        print(f"  [agent] Snapshot saved: {count} suburbs recorded in history.")
+    except Exception as e:
+        print(f"  [agent] Snapshot error: {e}")
+
     print("═"*60 + f"\n Pipeline: {status}\n Report  : {state['report_path']}\n" + "═"*60 + "\n")
     return state
+

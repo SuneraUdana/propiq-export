@@ -91,6 +91,14 @@ def init_db():
             suburbs_context  TEXT,
             top_property_ids TEXT
         );
+        CREATE TABLE IF NOT EXISTS suburb_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            suburb TEXT,
+            avg_score REAL,
+            median_price REAL,
+            listing_count INTEGER,
+            captured_at TEXT DEFAULT (datetime('now'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -382,3 +390,49 @@ def fetch_outcome_stats() -> dict:
     hits     = d.get("hits") or 0
     d["hit_rate_pct"] = round(hits / resolved * 100, 1) if resolved else None
     return d
+
+
+# ── Historical Data (Snapshots) ───────────────────────────────────────────────
+def snapshot_suburb_history() -> int:
+    """Takes a snapshot of current suburb metrics and saves to history."""
+    try:
+        conn = _connect()
+        stats = conn.execute("""
+            SELECT l.suburb, 
+                   COUNT(*) AS count, 
+                   AVG(s.inv_score) AS avg_score, 
+                   AVG(l.sale_price) AS median_price
+            FROM listings l
+            JOIN scores s ON l.listing_id = s.listing_id
+            GROUP BY l.suburb
+        """).fetchall()
+
+        records = [(r['suburb'], r['avg_score'], r['median_price'], r['count']) for r in stats]
+
+        if records:
+            conn.executemany("""
+                INSERT INTO suburb_history (suburb, avg_score, median_price, listing_count)
+                VALUES (?, ?, ?, ?)
+            """, records)
+            conn.commit()
+        conn.close()
+        return len(records)
+    except Exception as e:
+        print(f"[storage] Error taking suburb snapshot: {e}")
+        return 0
+
+def fetch_suburb_history(days: int = 30) -> list[dict]:
+    """Fetches historical snapshots for charting."""
+    try:
+        conn = _connect()
+        rows = conn.execute("""
+            SELECT suburb, avg_score, median_price, listing_count, captured_at
+            FROM suburb_history
+            WHERE captured_at >= datetime('now', ?)
+            ORDER BY captured_at ASC
+        """, (f'-{days} days',)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[storage] Error fetching suburb snapshot: {e}")
+        return []
