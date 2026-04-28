@@ -1,4 +1,3 @@
-"""PropIQ — FastAPI application with episodic memory + outcome tracking."""
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -7,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import os, sqlite3, json
 from pathlib import Path
 from groq import Groq
@@ -17,19 +17,56 @@ from propiq.storage import (
     log_pipeline_start, log_pipeline_finish,
     log_conversation, fetch_pipeline_runs, fetch_conversations,
     record_outcome, update_outcome, withdraw_outcome,
-    fetch_outcomes, fetch_outcome_stats,
+    fetch_outcomes, fetch_outcome_stats
 )
 from propiq.reporter import json_report
 from propiq.agent import run_pipeline
 from propiq.context import build_system_prompt
 
-# ── App ───────────────────────────────────────────────────────────────────────
-from contextlib import asynccontextmanager
+# ── Seed helper ───────────────────────────────────────────────────────────────
+def _do_seed(seed_path: Path) -> int:
+    raw = json.loads(seed_path.read_text())
+    records = raw if isinstance(raw, list) else raw.get(
+        "properties", raw.get("listings", raw.get("top_properties", [])))
 
+    from propiq.storage import upsert_listings, upsert_enrichments, upsert_scores
+    listings, enrichments, scores = [], [], []
+
+    for r in records:
+        listings.append({
+            "listing_id": r.get("listing_id"), "suburb": r.get("suburb"),
+            "address": r.get("address"), "sale_price": r.get("sale_price"),
+            "land_size_sqm": r.get("land_size_sqm"), "house_type": r.get("house_type"),
+            "year_built": r.get("year_built"), "bedrooms": r.get("bedrooms"),
+            "bathrooms": r.get("bathrooms"), "image_url": r.get("image_url"),
+        })
+
+        nlp = r.get("nlp_features", "{}")
+        if not isinstance(nlp, str):
+            nlp = json.dumps(nlp or {})
+
+        enrichments.append({
+            "listing_id": r.get("listing_id"), "material": r.get("material"),
+            "walk_score": r.get("walk_score"), "school_rating": r.get("school_rating"),
+            "nlp_features": nlp
+        })
+        scores.append({
+            "listing_id": r.get("listing_id"), "inv_score": r.get("inv_score"),
+            "yield_proxy": r.get("yield_proxy"), "risk_score": r.get("risk_score"),
+            "liquidity": r.get("liquidity"), "quality": r.get("quality"),
+            "rank_suburb": r.get("rank_suburb")
+        })
+
+    upsert_listings(listings)
+    upsert_enrichments(enrichments)
+    upsert_scores(scores)
+    return len(scores)
+
+# ── Lifespan (startup) ────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # everything that was inside startup() goes here
     init_db()
+    # Try loading DB from HF Hub dataset (if HF_TOKEN set)
     token = os.environ.get("HF_TOKEN", "")
     if token:
         try:
@@ -40,76 +77,7 @@ async def lifespan(app: FastAPI):
                 repo_type="dataset",
                 token=token,
                 local_dir=str(DB_PATH.parent),
-                local_dir_use_symlinks=False
-            )
-            print("[startup] DB loaded from HF dataset ✓")
-        except Exception as e:
-            print(f"[startup] No HF dataset DB yet: {e}")
-    try:
-        count = sqlite3.connect(DB_PATH).execute(
-            "SELECT COUNT(*) FROM scores").fetchone()[0]
-        if count == 0:
-            seed_path = Path(__file__).parent / "seed_data.json"
-            if seed_path.exists():
-                _do_seed(seed_path)
-                print("[startup] Auto-seeded from seed_data.json ✓")
-    except Exception as e:
-        print(f"[startup] Auto-seed skipped: {e}")
-    yield  # app runs here
-
-app = FastAPI(title="PropIQ API", version="0.2.0",
-              description="Property investment scoring engine with outcome tracking",
-              lifespan=lifespan)
-
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["*"], allow_headers=["*"])
-
-# ── Groq client ───────────────────────────────────────────────────────────────
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-_groq = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-
-# ── Models ────────────────────────────────────────────────────────────────────
-class PipelineRequest(BaseModel):
-    suburbs: list[str]
-
-class PipelineResponse(BaseModel):
-    status: str; suburbs: list[str]; message: str
-
-class ChatRequest(BaseModel):
-    message: str
-    model:   str        = "llama-3.3-70b-versatile"
-    history: list[dict] = []
-
-class OutcomeCreateRequest(BaseModel):
-    listing_id:      str
-    conv_id:         str | None = None
-    predicted_price: float | None = None
-    predicted_score: float | None = None
-    notes:           str | None = None
-
-class OutcomeUpdateRequest(BaseModel):
-    actual_sale: float
-    actual_date: str | None = None
-    notes:       str | None = None
-
-class OutcomeWithdrawRequest(BaseModel):
-    notes: str | None = None
-
-# ── Startup ───────────────────────────────────────────────────────────────────
-@app.on_event("startup")
-def startup():
-    init_db()
-    token = os.environ.get("HF_TOKEN", "")
-    if token:
-        try:
-            from huggingface_hub import hf_hub_download
-            hf_hub_download(
-                repo_id="sunera01/propiq-db",
-                filename="propiq.db",
-                repo_type="dataset",
-                token=token,
-                local_dir=str(DB_PATH.parent),
-                local_dir_use_symlinks=False
+                local_dir_use_symlinks=False,
             )
             print("[startup] DB loaded from HF dataset ✓")
         except Exception as e:
@@ -127,55 +95,71 @@ def startup():
     except Exception as e:
         print(f"[startup] Auto-seed skipped: {e}")
 
-# ── Seed helper ───────────────────────────────────────────────────────────────
-def _do_seed(seed_path: Path) -> int:
-    raw = json.loads(seed_path.read_text())
-    records = raw if isinstance(raw, list) else raw.get(
-        "properties", raw.get("listings", raw.get("top_properties", [])))
-    
-    from propiq.storage import upsert_listings, upsert_enrichments, upsert_scores
-    listings, enrichments, scores = [], [], []
-    
-    for r in records:
-        listings.append({
-            "listing_id": r.get("listing_id"), "suburb": r.get("suburb"),
-            "address": r.get("address"), "sale_price": r.get("sale_price"),
-            "land_size_sqm": r.get("land_size_sqm"), "house_type": r.get("house_type"),
-            "year_built": r.get("year_built"), "bedrooms": r.get("bedrooms"),
-            "bathrooms": r.get("bathrooms"), "image_url": r.get("image_url"),
-        })
-        enrichments.append({
-            "listing_id": r.get("listing_id"), "material": r.get("material"),
-            "walk_score": r.get("walk_score"), "school_rating": r.get("school_rating"),
-            "nlp_features": r.get("nlp_features", "{}") if isinstance(r.get("nlp_features"), str) else json.dumps(r.get("nlp_features") or {})
-        })
-        scores.append({
-            "listing_id": r.get("listing_id"), "inv_score": r.get("inv_score"),
-            "yield_proxy": r.get("yield_proxy"), "risk_score": r.get("risk_score"),
-            "liquidity": r.get("liquidity"), "quality": r.get("quality"),
-            "rank_suburb": r.get("rank_suburb")
-        })
-        
-    upsert_listings(listings)
-    upsert_enrichments(enrichments)
-    upsert_scores(scores)
-    return len(scores)
+    yield # app runs here
+
+# ── App ───────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="PropIQ API",
+    version="0.2.0",
+    description="Property investment scoring engine with outcome tracking",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Groq client ───────────────────────────────────────────────────────────────
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+_groq = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# ── Models ────────────────────────────────────────────────────────────────────
+class PipelineRequest(BaseModel):
+    suburbs: list[str]
+
+class PipelineResponse(BaseModel):
+    status: str
+    suburbs: list[str]
+    message: str
+
+class ChatRequest(BaseModel):
+    message: str
+    model: str = "llama-3.3-70b-versatile"
+    history: list[dict] = []
+
+class OutcomeCreateRequest(BaseModel):
+    listing_id: str
+    conv_id: str | None = None
+    predicted_price: float | None = None
+    predicted_score: float | None = None
+    notes: str | None = None
+
+class OutcomeUpdateRequest(BaseModel):
+    actual_sale: float
+    actual_date: str | None = None
+    notes: str | None = None
+
+class OutcomeWithdrawRequest(BaseModel):
+    notes: str | None = None
 
 # ── Static / Dashboard ────────────────────────────────────────────────────────
 _static = Path("static")
 if _static.exists():
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
-    @app.get("/", include_in_schema=False)
-    def dashboard():
-        return FileResponse("static/index.html")
+@app.get("/", include_in_schema=False)
+def dashboard():
+    return FileResponse("static/index.html")
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.2.0"}
 
-# ── Seed endpoint (one-shot bootstrap) ───────────────────────────────────────
+# ── Seed endpoint ─────────────────────────────────────────────────────────────
 @app.post("/api/seed")
 def seed():
     """Bootstrap: insert seed_data.json into DB. Safe to call multiple times."""
@@ -199,6 +183,11 @@ def market_context(
             detail=f"No scored listings for '{suburb}'. Run POST /api/pipeline/run first.")
     return {**report, "agents": agents}
 
+@app.get("/api/market-context/history")
+def market_history(days: int = Query(30, ge=1, le=365)):
+    from propiq.storage import fetch_suburb_history
+    return {"history": fetch_suburb_history(days=days)}
+
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 _running: set[str] = set()
 
@@ -209,11 +198,11 @@ def pipeline_run(body: PipelineRequest, background_tasks: BackgroundTasks):
     already = [s for s in body.suburbs if s in _running]
     if already:
         raise HTTPException(status_code=409,
-            detail=f"Pipeline already running for: {already}")
+            detail=f"Pipeline already running for {already}")
     for s in body.suburbs:
         _running.add(s)
 
-    def _run_and_cleanup(suburbs: list[str]):
+    def run_and_cleanup(suburbs: list[str]):
         run_id = log_pipeline_start(suburbs)
         listings_found = scores_written = 0
         try:
@@ -223,15 +212,17 @@ def pipeline_run(body: PipelineRequest, background_tasks: BackgroundTasks):
                 scores_written = len(result.get("scored", []))
             log_pipeline_finish(run_id, listings_found, scores_written, "done")
         except Exception as exc:
-            log_pipeline_finish(run_id, listings_found, scores_written,
-                                "error", str(exc))
+            log_pipeline_finish(run_id, listings_found, scores_written, "error", str(exc))
         finally:
             for s in suburbs:
                 _running.discard(s)
 
-    background_tasks.add_task(_run_and_cleanup, body.suburbs)
-    return PipelineResponse(status="accepted", suburbs=body.suburbs,
-        message="Pipeline started. Poll GET /api/market-context to see results.")
+    background_tasks.add_task(run_and_cleanup, body.suburbs)
+    return PipelineResponse(
+        status="accepted",
+        suburbs=body.suburbs,
+        message="Pipeline started. Poll GET /api/market-context to see results.",
+    )
 
 @app.get("/api/pipeline/status")
 def pipeline_status():
@@ -241,28 +232,28 @@ def pipeline_status():
 def pipeline_history(limit: int = Query(20, ge=1, le=100)):
     return {"runs": fetch_pipeline_runs(limit=limit)}
 
-@app.get("/api/market-context/history")
-def market_history(days: int = Query(30, ge=1, le=365)):
-    from propiq.storage import fetch_suburb_history
-    return {"history": fetch_suburb_history(days=days)}
-
 # ── Chat ──────────────────────────────────────────────────────────────────────
 @app.post("/api/chat")
 def chat(payload: ChatRequest):
     if not GROQ_API_KEY or _groq is None:
         raise HTTPException(status_code=500,
             detail="GROQ_API_KEY not set. Add it to .env file.")
+
     system_prompt, suburbs_ctx, top_ids = build_system_prompt(return_meta=True)
     messages = [{"role": "system", "content": system_prompt}]
     messages += payload.history
     messages.append({"role": "user", "content": payload.message})
+
     resp = _groq.chat.completions.create(
-        model=payload.model, messages=messages,
-        temperature=0.3, max_tokens=1024)
+        model=payload.model,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=1024,
+    )
+
     answer = resp.choices[0].message.content
     tokens = resp.usage.total_tokens
-    log_conversation(payload.message, answer, payload.model, tokens,
-                     suburbs_ctx, top_ids)
+    log_conversation(payload.message, answer, payload.model, tokens, suburbs_ctx, top_ids)
     return {"reply": answer, "model": payload.model, "tokens": tokens}
 
 @app.get("/api/chat/history")
@@ -274,8 +265,8 @@ def chat_history(limit: int = Query(50, ge=1, le=200)):
 def create_outcome(body: OutcomeCreateRequest):
     outcome_id = record_outcome(
         listing_id=body.listing_id, conv_id=body.conv_id,
-        predicted_price=body.predicted_price,
-        predicted_score=body.predicted_score, notes=body.notes,
+        predicted_price=body.predicted_price, predicted_score=body.predicted_score,
+        notes=body.notes,
     )
     return {"outcome_id": outcome_id, "status": "pending"}
 
